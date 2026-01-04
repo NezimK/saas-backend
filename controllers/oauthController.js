@@ -2,6 +2,7 @@ const { google } = require('googleapis');
 const oauthConfig = require('../config/oauth');
 const supabaseService = require('../services/supabaseService');
 const workflowService = require('../services/workflowService');
+const n8nService = require('../services/n8nService');
 
 class OAuthController {
   // Générer l'URL de connexion Gmail
@@ -94,12 +95,42 @@ class OAuthController {
 
       console.log('✅ Tokens Gmail sauvegardés dans Supabase');
 
+      // Créer le credential Gmail dans n8n
+      console.log('🔑 Création du credential Gmail dans n8n...');
+      let gmailCredential;
+      try {
+        gmailCredential = await n8nService.createCredential(
+          'gmailOAuth2',
+          `Gmail - ${tenantId}`,
+          {
+            serverUrl: "",
+            clientId: oauthConfig.google.clientId,
+            clientSecret: oauthConfig.google.clientSecret,
+            sendAdditionalBodyProperties: false,
+            additionalBodyProperties: {},
+            oauthTokenData: tokens
+          }
+        );
+
+        console.log(`✅ Credential Gmail créé: ${gmailCredential.id}`);
+
+        // Sauvegarder l'ID du credential dans Supabase
+        await supabaseService.supabase
+          .from('tenants')
+          .update({ gmail_credential_id: gmailCredential.id })
+          .eq('tenant_id', tenantId);
+
+      } catch (credentialError) {
+        console.error('⚠️  Erreur création credential:', credentialError.message);
+        gmailCredential = null;
+      }
+
       // Créer automatiquement le workflow n8n
       console.log('🤖 Création automatique du workflow n8n...');
 
       let workflowResult;
       try {
-        workflowResult = await workflowService.createGmailWorkflow(tenantId);
+        workflowResult = await workflowService.createGmailWorkflow(tenantId, gmailCredential?.id);
 
         if (workflowResult.created) {
           console.log(`✅ Workflow créé automatiquement: ${workflowResult.workflowId}`);

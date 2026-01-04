@@ -10,27 +10,13 @@ const n8nAPI = axios.create({
 });
 
 // Créer un credential dans n8n
-async function createCredential(credentialConfig) {
+async function createCredential(type, name, data) {
     try {
-        const { name, type, data, nodesAccess } = credentialConfig;
-
-        // Format selon le type
-        let credentialData = { ...data };
-
-        if (type === 'openAiApi') {
-            credentialData.header = false;
-        }
-
         const payload = {
             name,
             type,
-            data: credentialData
+            data
         };
-
-        // Ajoute nodesAccess si fourni
-        if (nodesAccess) {
-            payload.nodesAccess = nodesAccess;
-        }
 
         console.log(`🔑 Création credential: ${name} (${type})`);
 
@@ -38,7 +24,7 @@ async function createCredential(credentialConfig) {
 
         console.log(`✅ Credential créé: ${result.id}`);
 
-        return result.id;
+        return result;
     } catch (error) {
         console.error('❌ Erreur création credential:', {
             message: error.message,

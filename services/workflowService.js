@@ -5,7 +5,7 @@ class WorkflowService {
   /**
    * Crée automatiquement un workflow Gmail pour un tenant
    */
-  async createGmailWorkflow(tenantId) {
+  async createGmailWorkflow(tenantId, gmailCredentialId) {
     try {
       console.log(`\n📋 Création automatique du workflow pour: ${tenantId}`);
 
@@ -32,200 +32,51 @@ class WorkflowService {
         ? JSON.parse(template.template_json)
         : template.template_json;
 
-      // 4. Construire le workflow avec HTTP Request
+      // 4. Vérifier que le credential Gmail existe
+      if (!gmailCredentialId) {
+        throw new Error('Gmail credential ID manquant');
+      }
+
+      // 5. Construire le workflow avec Gmail Trigger natif
       const workflow = {
         name: `Email Parser - ${tenantId}`,
         nodes: [
-          // Node 1: Schedule Trigger (toutes les minutes)
+          // Node 1: Gmail Trigger (détecte les nouveaux emails)
           {
-            name: 'Schedule',
-            type: 'n8n-nodes-base.scheduleTrigger',
+            name: 'Gmail Trigger',
+            type: 'n8n-nodes-base.gmailTrigger',
             typeVersion: 1,
             position: [250, 300],
             parameters: {
-              rule: {
-                interval: [{ field: 'minutes', minutesInterval: 1 }]
-              }
-            }
-          },
-
-          // Node 2: Get Valid Access Token
-          {
-            name: 'Get Access Token',
-            type: 'n8n-nodes-base.httpRequest',
-            typeVersion: 4,
-            position: [450, 300],
-            parameters: {
-              url: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/token/gmail/${tenantId}`,
-              method: 'GET',
-              options: {}
-            }
-          },
-
-          // Node 3: List Gmail Messages
-          {
-            name: 'List Gmail Messages',
-            type: 'n8n-nodes-base.httpRequest',
-            typeVersion: 4,
-            position: [650, 300],
-            parameters: {
-              url: '=https://gmail.googleapis.com/gmail/v1/users/me/messages?q=from:alimekzine@emkai.fr&maxResults=10',
-              method: 'GET',
-              authentication: 'none',
-              options: {
-                queryParameters: {
-                  parameters: [
-                    {
-                      name: 'access_token',
-                      value: '={{ $node["Get Access Token"].json.access_token }}'
-                    }
-                  ]
-                }
-              }
-            }
-          },
-
-          // Node 4: Check if messages exist
-          {
-            name: 'Check Messages',
-            type: 'n8n-nodes-base.if',
-            typeVersion: 2,
-            position: [850, 300],
-            parameters: {
-              conditions: {
-                options: {
-                  caseSensitive: true,
-                  leftValue: '',
-                  typeValidation: 'strict'
-                },
-                conditions: [
+              pollTimes: {
+                item: [
                   {
-                    leftValue: '={{ $json.messages }}',
-                    rightValue: '',
-                    operator: {
-                      type: 'array',
-                      operation: 'notEmpty'
-                    }
+                    mode: 'everyMinute'
                   }
-                ],
-                combineOperation: 'all'
+                ]
+              },
+              filters: {
+                from: 'alimekzine@emkai.fr'
+              },
+              simple: false
+            },
+            credentials: {
+              gmailOAuth2: {
+                id: gmailCredentialId,
+                name: `Gmail - ${tenantId}`
               }
-            }
-          },
-
-          // Node 5: Split Messages
-          {
-            name: 'Split Messages',
-            type: 'n8n-nodes-base.splitInBatches',
-            typeVersion: 3,
-            position: [1050, 200],
-            parameters: {
-              batchSize: 1,
-              options: {}
-            }
-          },
-
-          // Node 6: Get Message Details
-          {
-            name: 'Get Message Details',
-            type: 'n8n-nodes-base.httpRequest',
-            typeVersion: 4,
-            position: [1250, 200],
-            parameters: {
-              url: '=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.messages[0].id }}?format=full',
-              method: 'GET',
-              authentication: 'none',
-              options: {
-                queryParameters: {
-                  parameters: [
-                    {
-                      name: 'access_token',
-                      value: '={{ $node["Get Access Token"].json.access_token }}'
-                    }
-                  ]
-                }
-              }
-            }
-          },
-
-          // Node 7: Extract Email Body
-          {
-            name: 'Extract Email Body',
-            type: 'n8n-nodes-base.code',
-            typeVersion: 2,
-            position: [1450, 200],
-            parameters: {
-              mode: 'runOnceForAllItems',
-              jsCode: `
-// Extraire le corps de l'email
-const message = $input.all()[0].json;
-const payload = message.payload;
-
-function getBody(payload) {
-  if (payload.body && payload.body.data) {
-    return Buffer.from(payload.body.data, 'base64').toString('utf-8');
-  }
-
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' && part.body && part.body.data) {
-        return Buffer.from(part.body.data, 'base64').toString('utf-8');
-      }
-    }
-
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/html' && part.body && part.body.data) {
-        return Buffer.from(part.body.data, 'base64').toString('utf-8');
-      }
-    }
-  }
-
-  return '';
-}
-
-const subject = payload.headers.find(h => h.name === 'Subject')?.value || '';
-const from = payload.headers.find(h => h.name === 'From')?.value || '';
-const body = getBody(payload);
-
-return [{
-  json: {
-    subject,
-    from,
-    body,
-    messageId: message.id
-  }
-}];
-`
             }
           },
 
           // Nodes du template (OpenAI Parser, etc.)
           ...workflowJson.nodes.slice(1).map((node, index) => ({
             ...node,
-            position: [1650 + (index * 200), 200]
+            position: [450 + (index * 200), 300]
           }))
         ],
 
         connections: {
-          'Schedule': {
-            main: [[{ node: 'Get Access Token', type: 'main', index: 0 }]]
-          },
-          'Get Access Token': {
-            main: [[{ node: 'List Gmail Messages', type: 'main', index: 0 }]]
-          },
-          'List Gmail Messages': {
-            main: [[{ node: 'Check Messages', type: 'main', index: 0 }]]
-          },
-          'Check Messages': {
-            main: [[{ node: 'Split Messages', type: 'main', index: 0 }], []]
-          },
-          'Split Messages': {
-            main: [[{ node: 'Get Message Details', type: 'main', index: 0 }]]
-          },
-          'Get Message Details': {
-            main: [[{ node: 'Extract Email Body', type: 'main', index: 0 }]]
-          },
-          'Extract Email Body': {
+          'Gmail Trigger': {
             main: [[{ node: workflowJson.nodes[1].name, type: 'main', index: 0 }]]
           },
           // Conserver les connexions du template
@@ -238,7 +89,7 @@ return [{
         settings: workflowJson.settings || {}
       };
 
-      // 5. Créer le workflow dans n8n
+      // 6. Créer le workflow dans n8n
       console.log('📤 Création du workflow dans n8n...');
       const createdWorkflow = await n8nService.createWorkflow(workflow, tenantId);
 
