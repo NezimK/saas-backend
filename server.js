@@ -1,7 +1,7 @@
 const express = require('express');
 require('dotenv').config();
 
-const onboardingRoutes = require('./routes/onboarding');
+const onboardingRoutes = require('./routes/onboardingRoutes');
 const authRoutes = require('./routes/authRoutes');
 const gmailRoutes = require('./routes/gmailRoutes');
 const tokenRoutes = require('./routes/tokenRoutes');
@@ -19,6 +19,7 @@ axios.get(`${process.env.N8N_API_URL}/workflows`, {
 
 // Middleware
 app.use(express.json());
+app.use(express.static('public')); // Servir les fichiers statiques (onboarding.html)
 
 // Routes
 app.use('/api/onboarding', onboardingRoutes);

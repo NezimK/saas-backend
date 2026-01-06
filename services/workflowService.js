@@ -37,7 +37,14 @@ class WorkflowService {
         throw new Error('Gmail credential ID manquant');
       }
 
-      // 5. Construire le workflow avec Gmail Trigger natif
+      // 5. Construire la requête de filtrage Gmail à partir des filtres du tenant
+      const emailFilters = tenant.email_filters || ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'];
+      const gmailQuery = 'from:(' + emailFilters.map(domain => `*@${domain}`).join(' OR ') + ')';
+
+      console.log(`📧 Filtres email configurés: ${emailFilters.join(', ')}`);
+      console.log(`🔍 Requête Gmail: ${gmailQuery}`);
+
+      // 6. Construire le workflow avec Gmail Trigger natif
       const workflow = {
         name: `Email Parser - ${tenantId}`,
         nodes: [
@@ -56,7 +63,8 @@ class WorkflowService {
                 ]
               },
               filters: {
-                from: 'alimekzine@emkai.fr'
+                labelIds: ['INBOX'],
+                q: gmailQuery
               },
               simple: false
             },
@@ -89,13 +97,13 @@ class WorkflowService {
         settings: workflowJson.settings || {}
       };
 
-      // 6. Créer le workflow dans n8n
+      // 7. Créer le workflow dans n8n
       console.log('📤 Création du workflow dans n8n...');
       const createdWorkflow = await n8nService.createWorkflow(workflow, tenantId);
 
       console.log(`✅ Workflow créé: ${createdWorkflow.id}`);
 
-      // 6. Sauvegarder l'ID du workflow dans Supabase
+      // 8. Sauvegarder l'ID du workflow dans Supabase
       await supabaseService.supabase
         .from('tenants')
         .update({ n8n_workflow_id: createdWorkflow.id })

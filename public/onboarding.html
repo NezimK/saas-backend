@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration - Immocope</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        h2 {
+            color: #667eea;
+            margin-top: 20px;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .step-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e0e0e0;
+        }
+
+        .step-dot.active {
+            background: #667eea;
+        }
+
+        .portals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .portal-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .portal-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+
+        .portal-card.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .portal-card input[type="checkbox"] {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .portal-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 18px;
+        }
+
+        .portal-domain {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            border-left: 4px solid #c33;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+            border-left: 4px solid #3c3;
+        }
+
+        .count {
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .info-box {
+            background: #f8f9ff;
+            border: 2px solid #e0e7ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .info-box ol {
+            margin-left: 20px;
+            color: #555;
+        }
+
+        .info-box li {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        .info-box a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .info-box a:hover {
+            text-decoration: underline;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: monospace;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 Configuration Immocope</h1>
+        <p class="subtitle">Configurez votre flux de notifications immobilières</p>
+
+        <!-- Indicateur d'étapes -->
+        <div class="step-indicator">
+            <div class="step-dot" id="dot1"></div>
+            <div class="step-dot" id="dot2"></div>
+            <div class="step-dot" id="dot3"></div>
+        </div>
+
+        <div id="error" class="error"></div>
+        <div id="success" class="success"></div>
+
+        <!-- Étape 1: Email -->
+        <div id="emailStep">
+            <div class="input-group">
+                <label for="emailInput">Votre adresse email</label>
+                <input
+                    type="email"
+                    id="emailInput"
+                    placeholder="exemple@email.com"
+                    onkeypress="if(event.key === 'Enter') checkEmail()"
+                >
+                <div class="help-text">Nous utiliserons cet email pour identifier votre compte</div>
+            </div>
+            <button class="btn btn-primary" onclick="checkEmail()">
+                Continuer →
+            </button>
+        </div>
+
+        <!-- Étape 2: Netty API -->
+        <div id="nettyStep" style="display: none;">
+            <p class="subtitle">Connectez votre logiciel Netty</p>
+
+            <div class="info-box">
+                <h3>Comment récupérer votre clé API Netty ?</h3>
+                <ol>
+                    <li><strong>Allez dans Netty :</strong> Paramètres > Configuration > Gestion des clés API</li>
+                    <li><strong>Cliquez sur "+ NOUVEAU"</strong></li>
+                    <li><strong>Remplir le formulaire :</strong>
+                        <ul style="margin-top: 5px; margin-left: 20px;">
+                            <li>Nom : "Immocope Bot"</li>
+                            <li>Données : Réelles</li>
+                            <li>Active : Oui</li>
+                            <li>IP autorisées : <code style="background: #fff; padding: 2px 6px; border-radius: 4px;">51.178.42.123</code></li>
+                        </ul>
+                    </li>
+                    <li><strong>Copiez la clé API</strong> générée et collez-la ci-dessous</li>
+                </ol>
+                <p style="margin-top: 15px;">
+                    <a href="https://aide.netty.fr/gestion-cles-api-modelo-office" target="_blank">
+                        📖 Voir le guide visuel complet →
+                    </a>
+                </p>
+            </div>
+
+            <div class="input-group">
+                <label for="apiKeyInput">Votre clé API Netty</label>
+                <input
+                    type="text"
+                    id="apiKeyInput"
+                    placeholder="Collez votre clé API ici"
+                    onkeypress="if(event.key === 'Enter') validateNettyAPI()"
+                >
+                <div class="help-text">Cette clé permet à Immocope de synchroniser vos biens automatiquement</div>
+            </div>
+
+            <button class="btn btn-primary" id="validateNettyBtn" onclick="validateNettyAPI()">
+                Valider et continuer →
+            </button>
+        </div>
+
+        <!-- Étape 3: Sélection des portails -->
+        <div id="portalsStep" style="display: none;">
+            <p class="subtitle">Sélectionnez les portails immobiliers dont vous souhaitez recevoir les notifications</p>
+
+            <div class="portals-grid" id="portalsGrid">
+                <!-- Les portails seront ajoutés dynamiquement -->
+            </div>
+
+            <p style="margin-bottom: 20px; color: #666;">
+                <span class="count" id="selectedCount">0</span> portail(s) sélectionné(s)
+            </p>
+
+            <div class="btn-container">
+                <button class="btn btn-secondary" onclick="selectAll()">Tout sélectionner</button>
+                <button class="btn btn-primary" id="continueBtn" onclick="saveAndContinue()" disabled>
+                    Finaliser →
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const portals = [
+            { name: 'Leboncoin', domain: 'leboncoin.fr', icon: '🏠' },
+            { name: 'SeLoger', domain: 'seloger.com', icon: '🔑' },
+            { name: 'PAP', domain: 'pap.fr', icon: '🏡' },
+            { name: 'Logic-immo', domain: 'logic-immo.com', icon: '📍' },
+            { name: "Bien'ici", domain: 'bienici.com', icon: '🏘️' },
+            { name: 'AVendreALouer', domain: 'avendrealouer.fr', icon: '🏢' },
+            { name: 'ParuVendu', domain: 'paruvendu.fr', icon: '📰' },
+            { name: 'LeFigaro Immo', domain: 'lefigaro.fr', icon: '📄' }
+        ];
+
+        let tenantId = null;
+        let userEmail = null;
+        let currentStep = 1;
+
+        // Mettre à jour l'indicateur d'étapes
+        function updateStepIndicator() {
+            document.getElementById('dot1').classList.toggle('active', currentStep >= 1);
+            document.getElementById('dot2').classList.toggle('active', currentStep >= 2);
+            document.getElementById('dot3').classList.toggle('active', currentStep >= 3);
+        }
+
+        updateStepIndicator();
+
+        async function checkEmail() {
+            const emailInput = document.getElementById('emailInput');
+            const email = emailInput.value.trim();
+
+            if (!email) {
+                showError('Veuillez entrer votre adresse email');
+                return;
+            }
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showError('Veuillez entrer une adresse email valide');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/onboarding/get-or-create-tenant', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la vérification de l\'email');
+                }
+
+                tenantId = data.tenantId;
+                userEmail = email;
+
+                console.log(data.isExisting ? '✅ Tenant existant chargé' : '✅ Nouveau tenant créé', tenantId);
+
+                if (data.isExisting) {
+                    showSuccess(`Bienvenue ! Vos préférences actuelles sont chargées.`);
+                }
+
+                // Passer à l'étape Netty
+                document.getElementById('emailStep').style.display = 'none';
+                document.getElementById('nettyStep').style.display = 'block';
+                currentStep = 2;
+                updateStepIndicator();
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function validateNettyAPI() {
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            const apiKey = apiKeyInput.value.trim();
+
+            if (!apiKey) {
+                showError('Veuillez entrer votre clé API Netty');
+                return;
+            }
+
+            if (!tenantId) {
+                showError('Erreur: tenant non initialisé');
+                return;
+            }
+
+            const btn = document.getElementById('validateNettyBtn');
+            btn.disabled = true;
+            btn.textContent = 'Validation en cours...';
+
+            try {
+                const response = await fetch('/api/onboarding/validate-netty-api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ tenantId, apiKey })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la validation de la clé API');
+                }
+
+                showSuccess('✅ Clé API Netty validée avec succès !');
+
+                // Passer à l'étape portails après 1 seconde
+                setTimeout(() => {
+                    document.getElementById('nettyStep').style.display = 'none';
+                    document.getElementById('portalsStep').style.display = 'block';
+                    currentStep = 3;
+                    updateStepIndicator();
+                    renderPortals([]);
+                }, 1000);
+
+            } catch (error) {
+                showError(error.message);
+                btn.disabled = false;
+                btn.textContent = 'Valider et continuer →';
+            }
+        }
+
+        function renderPortals(existingFilters = []) {
+            const grid = document.getElementById('portalsGrid');
+            grid.innerHTML = portals.map((portal, index) => `
+                <div class="portal-card" id="card-${index}" onclick="togglePortal(${index})">
+                    <input type="checkbox" id="portal-${index}" onchange="updateSelection()">
+                    <div class="portal-name">${portal.icon} ${portal.name}</div>
+                    <div class="portal-domain">${portal.domain}</div>
+                </div>
+            `).join('');
+
+            if (existingFilters.length > 0) {
+                portals.forEach((portal, i) => {
+                    if (existingFilters.includes(portal.domain)) {
+                        document.getElementById(`portal-${i}`).checked = true;
+                        document.getElementById(`card-${i}`).classList.add('selected');
+                    }
+                });
+            } else {
+                [0, 1, 2, 3, 4].forEach(i => {
+                    document.getElementById(`portal-${i}`).checked = true;
+                    document.getElementById(`card-${i}`).classList.add('selected');
+                });
+            }
+            updateSelection();
+        }
+
+        function togglePortal(index) {
+            const checkbox = document.getElementById(`portal-${index}`);
+            const card = document.getElementById(`card-${index}`);
+
+            checkbox.checked = !checkbox.checked;
+            card.classList.toggle('selected', checkbox.checked);
+            updateSelection();
+        }
+
+        function updateSelection() {
+            const selected = portals.filter((_, i) =>
+                document.getElementById(`portal-${i}`)?.checked
+            ).length;
+
+            document.getElementById('selectedCount').textContent = selected;
+            document.getElementById('continueBtn').disabled = selected === 0;
+        }
+
+        function selectAll() {
+            portals.forEach((_, i) => {
+                document.getElementById(`portal-${i}`).checked = true;
+                document.getElementById(`card-${i}`).classList.add('selected');
+            });
+            updateSelection();
+        }
+
+        async function saveAndContinue() {
+            const selectedDomains = portals
+                .filter((_, i) => document.getElementById(`portal-${i}`).checked)
+                .map(p => p.domain);
+
+            if (selectedDomains.length === 0) {
+                showError('Veuillez sélectionner au moins un portail');
+                return;
+            }
+
+            if (!tenantId) {
+                showError('Erreur: tenant non initialisé');
+                return;
+            }
+
+            document.getElementById('continueBtn').disabled = true;
+            document.getElementById('continueBtn').textContent = 'Enregistrement...';
+
+            try {
+                const response = await fetch('/api/onboarding/update-filters', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tenantId,
+                        emailFilters: selectedDomains
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la sauvegarde');
+                }
+
+                showSuccess('✅ Configuration enregistrée !');
+
+                setTimeout(() => {
+                    window.location.href = `/auth/gmail/connect?tenantId=${tenantId}`;
+                }, 1500);
+
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('continueBtn').disabled = false;
+                document.getElementById('continueBtn').textContent = 'Finaliser →';
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            document.getElementById('success').style.display = 'none';
+            setTimeout(() => errorDiv.style.display = 'none', 5000);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
