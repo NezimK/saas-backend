@@ -26,75 +26,88 @@ class WorkflowService {
         return { workflowId: tenant.n8n_workflow_id, created: false };
       }
 
-      // 3. Récupérer le template
+      // 3. Récupérer le mapping des champs pour le logiciel du tenant
+      let fieldMapping = null;
+      if (tenant.logiciel) {
+        const { data: mappingData } = await supabaseService.supabase
+          .from('logiciel_mappings')
+          .select('mapping_biens')
+          .eq('logiciel', tenant.logiciel)
+          .single();
+
+        if (mappingData) {
+          fieldMapping = Object.keys(mappingData.mapping_biens);
+          console.log(`📋 Champs disponibles pour ${tenant.logiciel}: ${fieldMapping.length} champs`);
+        }
+      }
+
+      // 4. Récupérer le template depuis Supabase
       const template = await supabaseService.getWorkflowTemplate('email-parser');
       const workflowJson = typeof template.template_json === 'string'
         ? JSON.parse(template.template_json)
         : template.template_json;
 
-      // 4. Vérifier que le credential Gmail existe
+      // 5. Vérifier que le credential Gmail existe
       if (!gmailCredentialId) {
         throw new Error('Gmail credential ID manquant');
       }
 
-      // 5. Construire la requête de filtrage Gmail à partir des filtres du tenant
+      // 6. Construire la requête de filtrage Gmail à partir des filtres du tenant
       const emailFilters = tenant.email_filters || ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'];
       const gmailQuery = 'from:(' + emailFilters.map(domain => `*@${domain}`).join(' OR ') + ')';
 
       console.log(`📧 Filtres email configurés: ${emailFilters.join(', ')}`);
       console.log(`🔍 Requête Gmail: ${gmailQuery}`);
 
-      // 6. Construire le workflow avec Gmail Trigger natif
+      // 6. Personnaliser le workflow depuis le template
       const workflow = {
         name: `Email Parser - ${tenantId}`,
-        nodes: [
-          // Node 1: Gmail Trigger (détecte les nouveaux emails)
-          {
-            name: 'Gmail Trigger',
-            type: 'n8n-nodes-base.gmailTrigger',
-            typeVersion: 1,
-            position: [250, 300],
-            parameters: {
-              pollTimes: {
-                item: [
-                  {
-                    mode: 'everyMinute'
-                  }
-                ]
+        nodes: workflowJson.nodes.map((node, index) => {
+          // Node 0: Gmail Trigger - personnaliser avec credential et filtres
+          if (index === 0 && node.type === 'n8n-nodes-base.gmailTrigger') {
+            return {
+              ...node,
+              parameters: {
+                ...node.parameters,
+                filters: {
+                  labelIds: ['INBOX'],
+                  q: gmailQuery
+                }
               },
-              filters: {
-                labelIds: ['INBOX'],
-                q: gmailQuery
-              },
-              simple: false
-            },
-            credentials: {
-              gmailOAuth2: {
-                id: gmailCredentialId,
-                name: `Gmail - ${tenantId}`
+              credentials: {
+                gmailOAuth2: {
+                  id: gmailCredentialId,
+                  name: `Gmail - ${tenantId}`
+                }
               }
-            }
-          },
+            };
+          }
 
-          // Nodes du template (OpenAI Parser, etc.)
-          ...workflowJson.nodes.slice(1).map((node, index) => ({
-            ...node,
-            position: [450 + (index * 200), 300]
-          }))
-        ],
+          // Node 1: Set Tenant Info (Code) - remplacer les placeholders
+          if (index === 1 && node.name === 'Set Tenant Info') {
+            const jsCode = `const inputData = $input.first().json;
 
-        connections: {
-          'Gmail Trigger': {
-            main: [[{ node: workflowJson.nodes[1].name, type: 'main', index: 0 }]]
-          },
-          // Conserver les connexions du template
-          ...Object.fromEntries(
-            Object.entries(workflowJson.connections || {})
-              .filter(([key]) => key !== workflowJson.nodes[0].name)
-          )
-        },
+return {
+  json: {
+    ...inputData,
+    tenant_id: '${tenantId}',
+    client_id: '${tenant.client_id || tenantId}'
+  }
+};`;
 
-        settings: workflowJson.settings || {}
+            return {
+              ...node,
+              parameters: {
+                jsCode: jsCode
+              }
+            };
+          }
+
+          // Autres nodes: retourner tel quel
+          return node;
+        }),
+        connections: workflowJson.connections || {},
+        settings: workflowJson.settings || { executionOrder: 'v1' }
       };
 
       // 7. Créer le workflow dans n8n
