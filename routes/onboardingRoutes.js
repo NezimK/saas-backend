@@ -36,6 +36,8 @@ router.post('/get-or-create-tenant', async (req, res) => {
       return res.json({
         success: true,
         tenantId: existingTenant.tenant_id,
+        companyName: existingTenant.company_name,
+        accountType: existingTenant.account_type,
         emailFilters: existingTenant.email_filters || [],
         isExisting: true,
         message: 'Tenant existant chargé'
@@ -72,6 +74,54 @@ router.post('/get-or-create-tenant', async (req, res) => {
 
   } catch (error) {
     console.error('Erreur get-or-create-tenant:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/onboarding/update-account-info
+ * Met à jour le type de compte et le nom de l'entreprise
+ */
+router.post('/update-account-info', async (req, res) => {
+  try {
+    const { tenantId, accountType, companyName } = req.body;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenantId requis' });
+    }
+
+    if (!accountType || !['agence', 'independant'].includes(accountType)) {
+      return res.status(400).json({ error: 'accountType doit être "agence" ou "independant"' });
+    }
+
+    if (!companyName || companyName.trim() === '') {
+      return res.status(400).json({ error: 'companyName requis' });
+    }
+
+    console.log(`📝 Mise à jour des infos pour ${tenantId}: ${accountType} - ${companyName}`);
+
+    const { error } = await supabaseService.supabase
+      .from('tenants')
+      .update({
+        account_type: accountType,
+        company_name: companyName.trim()
+      })
+      .eq('tenant_id', tenantId);
+
+    if (error) {
+      console.error('Erreur mise à jour tenant:', error);
+      return res.status(500).json({ error: 'Erreur lors de la mise à jour du tenant' });
+    }
+
+    console.log(`✅ Infos mises à jour pour ${tenantId}`);
+
+    res.json({
+      success: true,
+      message: 'Informations mises à jour avec succès'
+    });
+
+  } catch (error) {
+    console.error('Erreur update-account-info:', error);
     res.status(500).json({ error: error.message });
   }
 });
