@@ -254,6 +254,8 @@
             <div class="step-dot" id="dot1"></div>
             <div class="step-dot" id="dot2"></div>
             <div class="step-dot" id="dot3"></div>
+            <div class="step-dot" id="dot4"></div>
+            <div class="step-dot" id="dot5"></div>
         </div>
 
         <div id="error" class="error"></div>
@@ -276,7 +278,43 @@
             </button>
         </div>
 
-        <!-- Étape 2: Netty API -->
+        <!-- Étape 2: Type de compte et nom -->
+        <div id="accountStep" style="display: none;">
+            <p class="subtitle">Parlez-nous de votre activité</p>
+
+            <div class="input-group">
+                <label>Type de compte</label>
+                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                    <label class="portal-card" style="flex: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                        <input type="radio" name="accountType" value="agence" id="agenceRadio" onchange="updateAccountType()" style="position: static; margin-right: 10px;">
+                        <span style="font-size: 24px; margin-right: 10px;">🏢</span>
+                        <span style="font-weight: 600;">Agence</span>
+                    </label>
+                    <label class="portal-card" style="flex: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 20px;">
+                        <input type="radio" name="accountType" value="independant" id="independantRadio" onchange="updateAccountType()" style="position: static; margin-right: 10px;">
+                        <span style="font-size: 24px; margin-right: 10px;">👤</span>
+                        <span style="font-weight: 600;">Indépendant</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label for="companyNameInput" id="companyNameLabel">Nom de votre agence</label>
+                <input
+                    type="text"
+                    id="companyNameInput"
+                    placeholder="Exemple: Immobilier Paris Centre"
+                    onkeypress="if(event.key === 'Enter') saveAccountInfo()"
+                >
+                <div class="help-text" id="companyNameHelp">Ce nom sera utilisé pour personnaliser vos communications</div>
+            </div>
+
+            <button class="btn btn-primary" onclick="saveAccountInfo()">
+                Continuer →
+            </button>
+        </div>
+
+        <!-- Étape 3: Netty API -->
         <div id="nettyStep" style="display: none;">
             <p class="subtitle">Connectez votre logiciel Netty</p>
 
@@ -353,6 +391,8 @@
 
         let tenantId = null;
         let userEmail = null;
+        let accountType = 'agence';
+        let companyName = '';
         let currentStep = 1;
 
         // Mettre à jour l'indicateur d'étapes
@@ -360,6 +400,26 @@
             document.getElementById('dot1').classList.toggle('active', currentStep >= 1);
             document.getElementById('dot2').classList.toggle('active', currentStep >= 2);
             document.getElementById('dot3').classList.toggle('active', currentStep >= 3);
+            document.getElementById('dot4').classList.toggle('active', currentStep >= 4);
+            document.getElementById('dot5').classList.toggle('active', currentStep >= 5);
+        }
+
+        // Mettre à jour le libellé selon le type de compte
+        function updateAccountType() {
+            const accountType = document.querySelector('input[name="accountType"]:checked')?.value || 'agence';
+            const label = document.getElementById('companyNameLabel');
+            const help = document.getElementById('companyNameHelp');
+            const input = document.getElementById('companyNameInput');
+
+            if (accountType === 'agence') {
+                label.textContent = 'Nom de votre agence';
+                input.placeholder = 'Exemple: Immobilier Paris Centre';
+                help.textContent = 'Ce nom sera utilisé pour personnaliser vos communications';
+            } else {
+                label.textContent = 'Votre nom professionnel';
+                input.placeholder = 'Exemple: Jean Dupont';
+                help.textContent = 'Votre nom en tant qu\'agent indépendant';
+            }
         }
 
         updateStepIndicator();
@@ -401,13 +461,80 @@
 
                 if (data.isExisting) {
                     showSuccess(`Bienvenue ! Vos préférences actuelles sont chargées.`);
+                    // Si tenant existant, pré-remplir les infos si disponibles
+                    if (data.accountType) {
+                        document.getElementById(data.accountType === 'agence' ? 'agenceRadio' : 'independantRadio').checked = true;
+                        accountType = data.accountType;
+                    }
+                    if (data.companyName) {
+                        document.getElementById('companyNameInput').value = data.companyName;
+                        companyName = data.companyName;
+                    }
+                    updateAccountType();
+                } else {
+                    // Nouveau tenant: sélectionner "agence" par défaut
+                    document.getElementById('agenceRadio').checked = true;
+                    updateAccountType();
                 }
 
-                // Passer à l'étape Netty
+                // Passer à l'étape Type de compte
                 document.getElementById('emailStep').style.display = 'none';
-                document.getElementById('nettyStep').style.display = 'block';
+                document.getElementById('accountStep').style.display = 'block';
                 currentStep = 2;
                 updateStepIndicator();
+
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function saveAccountInfo() {
+            const selectedType = document.querySelector('input[name="accountType"]:checked');
+            const companyNameInput = document.getElementById('companyNameInput');
+            const name = companyNameInput.value.trim();
+
+            if (!selectedType) {
+                showError('Veuillez sélectionner un type de compte');
+                return;
+            }
+
+            if (!name) {
+                showError('Veuillez entrer le nom de votre ' + (selectedType.value === 'agence' ? 'agence' : 'activité'));
+                return;
+            }
+
+            accountType = selectedType.value;
+            companyName = name;
+
+            try {
+                // Mettre à jour le tenant avec les informations
+                const response = await fetch('/api/onboarding/update-account-info', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tenantId,
+                        accountType,
+                        companyName
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la sauvegarde');
+                }
+
+                showSuccess('✅ Informations enregistrées !');
+
+                // Passer à l'étape Netty
+                setTimeout(() => {
+                    document.getElementById('accountStep').style.display = 'none';
+                    document.getElementById('nettyStep').style.display = 'block';
+                    currentStep = 3;
+                    updateStepIndicator();
+                }, 500);
 
             } catch (error) {
                 showError(error.message);
@@ -453,7 +580,7 @@
                 setTimeout(() => {
                     document.getElementById('nettyStep').style.display = 'none';
                     document.getElementById('portalsStep').style.display = 'block';
-                    currentStep = 3;
+                    currentStep = 4;
                     updateStepIndicator();
                     renderPortals([]);
                 }, 1000);
