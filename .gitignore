@@ -17,3 +17,11 @@ Thumbs.db
 .vscode/*
 !.vscode/mcp.json
 .idea/
+
+# Migrations SQL (contiennent des données sensibles ou temporaires)
+migrations/
+
+# Workflows n8n (exports JSON)
+workflows/
+
+champ.txt
