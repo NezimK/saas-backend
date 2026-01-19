@@ -89,7 +89,7 @@ const leboncoinEmailHTML = `
           Nom : Jean Dupont
         </p>
         <p style="font-size: 12px; color: #666; margin: 5px 0;">
-          Téléphone : 06 12 34 56 78
+          Téléphone : 06 45 54 13 19
         </p>
         <p style="font-size: 12px; color: #666; margin: 5px 0;">
           Email : jean.dupont@gmail.com
@@ -143,7 +143,7 @@ Cordialement,
 
 Coordonnées de l'acheteur :
 Nom : Jean Dupont
-Téléphone : 06 12 34 56 78
+Téléphone : 06 45 54 13 19
 Email : jean.dupont@gmail.com
 
 Répondre sur leboncoin : https://www.leboncoin.fr/messages

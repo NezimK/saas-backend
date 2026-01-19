@@ -5,6 +5,7 @@ const onboardingRoutes = require('./routes/onboardingRoutes');
 const authRoutes = require('./routes/authRoutes');
 const gmailRoutes = require('./routes/gmailRoutes');
 const tokenRoutes = require('./routes/tokenRoutes');
+const syncRoutes = require('./routes/syncRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,7 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/auth', authRoutes);
 app.use('/api/gmail', gmailRoutes);
 app.use('/api/token', tokenRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

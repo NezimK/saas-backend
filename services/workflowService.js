@@ -3,11 +3,111 @@ const n8nService = require('./n8nService');
 
 class WorkflowService {
   /**
-   * Crée automatiquement un workflow Gmail pour un tenant
+   * Remplace tous les placeholders dans un workflow n8n
+   * - Config nodes: TENANT_ID, LEADS_TABLE, BIENS_TABLE
+   * - Code nodes: TENANT_ID_PLACEHOLDER, CLIENT_ID_PLACEHOLDER, etc.
+   * - Supabase nodes: tableId hardcodé
+   *
+   * Architecture: Tables partagées dans public avec tenant_id pour filtrage
    */
-  async createGmailWorkflow(tenantId, gmailCredentialId) {
+  replacePlaceholdersInWorkflow(workflowJson, tenantId, tenant) {
+    console.log('🔍 [DEBUG replacePlaceholdersInWorkflow] Début');
+    console.log('🔍 [DEBUG] tenantId:', tenantId);
+
+    // Tables partagées dans public (pas de schémas séparés)
+    const leadsTable = 'leads';
+    const biensTable = 'biens';
+
+    console.log('🔍 [DEBUG] leadsTable:', leadsTable);
+    console.log('🔍 [DEBUG] biensTable:', biensTable);
+
+    let configNodeFound = false;
+
+    return {
+      ...workflowJson,
+      nodes: workflowJson.nodes.map((node, index) => {
+        console.log(`🔍 [DEBUG] Node ${index}: type=${node.type}, name=${node.name}`);
+
+        // 1. Config nodes (n8n-nodes-base.set named "Config")
+        if (node.type === 'n8n-nodes-base.set' && node.name === 'Config') {
+          configNodeFound = true;
+          console.log('🔍 [DEBUG] Config node trouvé! Avant:', JSON.stringify(node.parameters, null, 2));
+
+          // Garder la structure existante mais mettre à jour les valeurs
+          const updatedAssignments = node.parameters.assignments?.assignments?.map(assignment => {
+            if (assignment.name === 'TENANT_ID') {
+              return { ...assignment, value: tenantId };
+            } else if (assignment.name === 'LEADS_TABLE') {
+              return { ...assignment, value: leadsTable };
+            } else if (assignment.name === 'BIENS_TABLE') {
+              return { ...assignment, value: biensTable };
+            }
+            return assignment;
+          }) || [];
+
+          const updatedNode = {
+            ...node,
+            parameters: {
+              ...node.parameters,
+              assignments: {
+                ...node.parameters.assignments,
+                assignments: updatedAssignments
+              }
+            }
+          };
+
+          console.log('🔍 [DEBUG] Config node après:', JSON.stringify(updatedNode.parameters, null, 2));
+          return updatedNode;
+        }
+
+        // 2. Code nodes - remplacer placeholders dans jsCode
+        if (node.type === 'n8n-nodes-base.code' && node.parameters?.jsCode) {
+          return {
+            ...node,
+            parameters: {
+              ...node.parameters,
+              jsCode: node.parameters.jsCode
+                .replace(/TENANT_ID_PLACEHOLDER/g, tenantId)
+                .replace(/CLIENT_ID_PLACEHOLDER/g, tenant.client_id || tenantId)
+                .replace(/LEADS_TABLE_PLACEHOLDER/g, leadsTable)
+                .replace(/BIENS_TABLE_PLACEHOLDER/g, biensTable)
+            }
+          };
+        }
+
+        // 3. Supabase nodes - remplacer tableId hardcodé
+        if (node.parameters?.tableId && typeof node.parameters.tableId === 'string') {
+          let tableId = node.parameters.tableId;
+
+          // Remplacer les références hardcodées
+          if (tableId.includes('leads_immocope') || tableId === 'leads') {
+            tableId = leadsTable;
+          } else if (tableId === 'biens') {
+            tableId = biensTable;
+          }
+
+          return {
+            ...node,
+            parameters: {
+              ...node.parameters,
+              tableId
+            }
+          };
+        }
+
+        return node;
+      })
+    };
+
+    console.log('🔍 [DEBUG] Config node trouvé dans le workflow?', configNodeFound);
+  }
+  /**
+   * Crée automatiquement les 3 workflows pour un tenant
+   * (email-parser, bot-qualification, response-dashboard)
+   */
+  async createAllWorkflows(tenantId, gmailCredentialId) {
     try {
-      console.log(`\n📋 Création automatique du workflow pour: ${tenantId}`);
+      console.log(`\n📋 Création automatique des workflows pour: ${tenantId}`);
 
       // 1. Vérifier que le tenant a des tokens OAuth
       const { data: tenant, error } = await supabaseService.supabase
@@ -20,120 +120,225 @@ class WorkflowService {
         throw new Error(`Tenant ${tenantId} n'a pas de tokens OAuth`);
       }
 
-      // 2. Vérifier si un workflow existe déjà
+      // 2. Vérifier si des workflows existent déjà
       if (tenant.n8n_workflow_id) {
-        console.log(`⚠️  Un workflow existe déjà: ${tenant.n8n_workflow_id}`);
-        return { workflowId: tenant.n8n_workflow_id, created: false };
+        console.log(`⚠️  Des workflows existent déjà pour ce tenant`);
+        return {
+          emailParser: tenant.n8n_workflow_id,
+          created: false
+        };
       }
 
-      // 3. Récupérer le mapping des champs pour le logiciel du tenant
-      let fieldMapping = null;
-      if (tenant.logiciel) {
-        const { data: mappingData } = await supabaseService.supabase
-          .from('logiciel_mappings')
-          .select('mapping_biens')
-          .eq('logiciel', tenant.logiciel)
-          .single();
+      // 3. Tables partagées dans public - pas besoin de créer de schéma
+      // Les tables public.leads et public.biens utilisent tenant_id pour filtrer
+      console.log('\n📊 Utilisation des tables partagées (public.leads, public.biens)');
 
-        if (mappingData) {
-          fieldMapping = Object.keys(mappingData.mapping_biens);
-          console.log(`📋 Champs disponibles pour ${tenant.logiciel}: ${fieldMapping.length} champs`);
-        }
-      }
+      // 4. Créer ou récupérer le dossier n8n pour ce tenant
+      const project = await n8nService.createOrGetProjectFolder(tenant.company_name, tenantId);
+      const projectId = project ? project.id : null;
 
-      // 4. Récupérer le template depuis Supabase
-      const template = await supabaseService.getWorkflowTemplate('email-parser');
-      const workflowJson = typeof template.template_json === 'string'
-        ? JSON.parse(template.template_json)
-        : template.template_json;
-
-      // 5. Vérifier que le credential Gmail existe
-      if (!gmailCredentialId) {
-        throw new Error('Gmail credential ID manquant');
-      }
-
-      // 6. Construire la requête de filtrage Gmail à partir des filtres du tenant
-      const emailFilters = tenant.email_filters || ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'];
-      const gmailQuery = 'from:(' + emailFilters.map(domain => `*@${domain}`).join(' OR ') + ')';
-
-      console.log(`📧 Filtres email configurés: ${emailFilters.join(', ')}`);
-      console.log(`🔍 Requête Gmail: ${gmailQuery}`);
-
-      // 6. Personnaliser le workflow depuis le template
-      const workflow = {
-        name: `Email Parser - ${tenantId}`,
-        nodes: workflowJson.nodes.map((node, index) => {
-          // Node 0: Gmail Trigger - personnaliser avec credential et filtres
-          if (index === 0 && node.type === 'n8n-nodes-base.gmailTrigger') {
-            return {
-              ...node,
-              parameters: {
-                ...node.parameters,
-                filters: {
-                  labelIds: ['INBOX'],
-                  q: gmailQuery
-                }
-              },
-              credentials: {
-                gmailOAuth2: {
-                  id: gmailCredentialId,
-                  name: `Gmail - ${tenantId}`
-                }
-              }
-            };
-          }
-
-          // Node 1: Set Tenant Info (Code) - remplacer les placeholders
-          if (index === 1 && node.name === 'Set Tenant Info') {
-            const jsCode = `const inputData = $input.first().json;
-
-return {
-  json: {
-    ...inputData,
-    tenant_id: '${tenantId}',
-    client_id: '${tenant.client_id || tenantId}'
-  }
-};`;
-
-            return {
-              ...node,
-              parameters: {
-                jsCode: jsCode
-              }
-            };
-          }
-
-          // Autres nodes: retourner tel quel
-          return node;
-        }),
-        connections: workflowJson.connections || {},
-        settings: workflowJson.settings || { executionOrder: 'v1' }
+      // 5. Créer les 3 workflows
+      const workflows = {
+        emailParser: null,
+        botQualification: null,
+        responseDashboard: null
       };
 
-      // 7. Créer le workflow dans n8n
-      console.log('📤 Création du workflow dans n8n...');
-      const createdWorkflow = await n8nService.createWorkflow(workflow, tenantId);
+      // 4a. Créer le workflow Email Parser (avec Gmail credential)
+      console.log('\n📧 Création workflow: Email Parser');
+      workflows.emailParser = await this.createEmailParserWorkflow(
+        tenantId,
+        tenant,
+        gmailCredentialId,
+        projectId
+      );
 
-      console.log(`✅ Workflow créé: ${createdWorkflow.id}`);
+      // 4b. Créer le workflow Bot Qualification
+      console.log('\n🤖 Création workflow: Bot Qualification');
+      workflows.botQualification = await this.createWorkflowFromTemplate(
+        'bot-qualification',
+        tenantId,
+        tenant,
+        projectId
+      );
 
-      // 8. Sauvegarder l'ID du workflow dans Supabase
-      await supabaseService.supabase
+      // 4c. Créer le workflow Response Dashboard
+      console.log('\n📊 Création workflow: Response Dashboard');
+      workflows.responseDashboard = await this.createWorkflowFromTemplate(
+        'response-dashboard',
+        tenantId,
+        tenant,
+        projectId
+      );
+
+      // 5. Sauvegarder les IDs des workflows dans Supabase
+      // Tables partagées: leads et biens (dans public)
+      const leadsTableName = 'leads';
+      const biensTableName = 'biens';
+
+      console.log('\n💾 Sauvegarde dans Supabase...');
+
+      const { data: updateData, error: updateError } = await supabaseService.supabase
         .from('tenants')
-        .update({ n8n_workflow_id: createdWorkflow.id })
-        .eq('tenant_id', tenantId);
+        .update({
+          n8n_workflow_id: workflows.emailParser.id,
+          n8n_workflow_bot_id: workflows.botQualification.id,
+          n8n_workflow_dashboard_id: workflows.responseDashboard.id,
+          n8n_project_id: projectId,
+          leads_table_name: leadsTableName,
+          biens_table_name: biensTableName
+        })
+        .eq('tenant_id', tenantId)
+        .select();
 
-      console.log('✅ Workflow ID sauvegardé dans Supabase');
+      if (updateError) {
+        console.error('❌ Erreur sauvegarde Supabase:', updateError.message);
+        throw new Error(`Impossible de sauvegarder les workflows: ${updateError.message}`);
+      }
+
+      console.log('🔍 [DEBUG] Données sauvegardées:', JSON.stringify(updateData, null, 2));
+      console.log('\n✅ Tous les workflows créés et sauvegardés dans Supabase');
 
       return {
-        workflowId: createdWorkflow.id,
-        workflowName: createdWorkflow.name,
+        emailParser: workflows.emailParser.id,
+        botQualification: workflows.botQualification.id,
+        responseDashboard: workflows.responseDashboard.id,
+        projectId,
         created: true
       };
 
     } catch (error) {
-      console.error(`❌ Erreur création workflow pour ${tenantId}:`, error.message);
+      console.error(`❌ Erreur création workflows pour ${tenantId}:`, error.message);
       throw error;
     }
+  }
+
+  /**
+   * Crée le workflow Email Parser avec personnalisation Gmail
+   */
+  async createEmailParserWorkflow(tenantId, tenant, gmailCredentialId, projectId) {
+    console.log('🔍 [DEBUG createEmailParserWorkflow] Début');
+    console.log('🔍 [DEBUG] tenantId:', tenantId);
+    console.log('🔍 [DEBUG] tenant:', JSON.stringify(tenant, null, 2));
+
+    // Récupérer le template
+    const template = await supabaseService.getWorkflowTemplate('email-parser');
+    let workflowJson = typeof template.template_json === 'string'
+      ? JSON.parse(template.template_json)
+      : template.template_json;
+
+    console.log('🔍 [DEBUG] Template récupéré, nodes:', workflowJson.nodes?.length);
+
+    // Vérifier que le credential Gmail existe
+    if (!gmailCredentialId) {
+      throw new Error('Gmail credential ID manquant');
+    }
+
+    // Remplacer tous les placeholders (Config, Code, Supabase nodes)
+    workflowJson = this.replacePlaceholdersInWorkflow(workflowJson, tenantId, tenant);
+
+    // Construire la requête de filtrage Gmail
+    const emailFilters = tenant.email_filters || ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'];
+    const gmailQuery = 'from:(' + emailFilters.map(domain => `*@${domain}`).join(' OR ') + ')';
+
+    console.log(`📧 Filtres email: ${emailFilters.join(', ')}`);
+    console.log(`🔍 Requête Gmail: ${gmailQuery}`);
+
+    // Personnalisation spécifique Email Parser (Gmail credential et filtres)
+    const workflowName = `Email Parser - ${tenantId}`;
+    console.log('🔍 [DEBUG] Nom du workflow défini:', workflowName);
+
+    const workflow = {
+      name: workflowName,
+      nodes: workflowJson.nodes.map((node, index) => {
+        // Gmail Trigger: personnaliser avec credential et filtres (chercher par type, pas par index)
+        if (node.type === 'n8n-nodes-base.gmailTrigger') {
+          console.log(`🔍 [DEBUG] Gmail Trigger trouvé à l'index ${index}, application credential et filtres`);
+          return {
+            ...node,
+            parameters: {
+              ...node.parameters,
+              filters: {
+                labelIds: ['INBOX'],
+                q: gmailQuery
+              }
+            },
+            credentials: {
+              gmailOAuth2: {
+                id: gmailCredentialId,
+                name: `Gmail - ${tenantId}`
+              }
+            }
+          };
+        }
+
+        // Autres nodes: retourner tel quel (déjà modifiés par replacePlaceholdersInWorkflow)
+        return node;
+      }),
+      connections: workflowJson.connections || {},
+      settings: workflowJson.settings || { executionOrder: 'v1' }
+    };
+
+    console.log('🔍 [DEBUG] Workflow à envoyer à n8nService.createWorkflow:');
+    console.log('🔍 [DEBUG] - name:', workflow.name);
+    console.log('🔍 [DEBUG] - nodes count:', workflow.nodes.length);
+
+    // Créer le workflow dans n8n
+    const createdWorkflow = await n8nService.createWorkflow(workflow, tenantId, projectId);
+    console.log(`✅ Email Parser créé: ${createdWorkflow.id}`);
+    console.log('🔍 [DEBUG] Workflow créé, nom retourné par n8n:', createdWorkflow.name);
+
+    return createdWorkflow;
+  }
+
+  /**
+   * Crée un workflow depuis un template (générique)
+   */
+  async createWorkflowFromTemplate(templateName, tenantId, tenant, projectId) {
+    console.log(`🔍 [DEBUG createWorkflowFromTemplate] Début pour template: ${templateName}`);
+
+    // Récupérer le template
+    const template = await supabaseService.getWorkflowTemplate(templateName);
+    let workflowJson = typeof template.template_json === 'string'
+      ? JSON.parse(template.template_json)
+      : template.template_json;
+
+    console.log('🔍 [DEBUG] Template récupéré, nodes:', workflowJson.nodes?.length);
+
+    // Remplacer tous les placeholders (Config, Code, Supabase nodes)
+    workflowJson = this.replacePlaceholdersInWorkflow(workflowJson, tenantId, tenant);
+
+    // Personnaliser le nom du workflow
+    const workflowNames = {
+      'bot-qualification': `Bot Qualification - ${tenantId}`,
+      'response-dashboard': `Response Dashboard - ${tenantId}`
+    };
+
+    const workflowName = workflowNames[templateName] || `${templateName} - ${tenantId}`;
+    console.log('🔍 [DEBUG] Nom du workflow défini:', workflowName);
+
+    const workflow = {
+      name: workflowName,
+      nodes: workflowJson.nodes, // Les placeholders ont déjà été remplacés
+      connections: workflowJson.connections || {},
+      settings: workflowJson.settings || { executionOrder: 'v1' }
+    };
+
+    console.log('🔍 [DEBUG] Workflow à envoyer, name:', workflow.name);
+
+    // Créer le workflow dans n8n
+    const createdWorkflow = await n8nService.createWorkflow(workflow, tenantId, projectId);
+    console.log(`✅ ${workflowName} créé: ${createdWorkflow.id}`);
+    console.log('🔍 [DEBUG] Workflow créé, nom retourné par n8n:', createdWorkflow.name);
+
+    return createdWorkflow;
+  }
+
+  /**
+   * Alias pour compatibilité avec l'ancien code
+   */
+  async createGmailWorkflow(tenantId, gmailCredentialId) {
+    return this.createAllWorkflows(tenantId, gmailCredentialId);
   }
 }
 

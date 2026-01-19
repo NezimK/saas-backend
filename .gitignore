@@ -25,3 +25,5 @@ migrations/
 workflows/
 
 champ.txt
+
+.vscode/

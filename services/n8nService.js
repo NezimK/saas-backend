@@ -36,10 +36,14 @@ async function createCredential(type, name, data) {
 }
 
 // Créer un workflow depuis un template
-async function createWorkflow(workflowTemplate, tenantId) {
+async function createWorkflow(workflowTemplate, tenantId, projectId = null) {
     try {
+        console.log('🔍 [DEBUG n8nService.createWorkflow] Début');
+        console.log('🔍 [DEBUG] workflowTemplate.name reçu:', workflowTemplate.name);
+
         // Clone le template
         const workflow = JSON.parse(JSON.stringify(workflowTemplate));
+        console.log('🔍 [DEBUG] workflow.name après clone:', workflow.name);
 
         // Liste des propriétés autorisées pour la création d'un workflow
         const allowedWorkflowProps = ['name', 'nodes', 'connections', 'settings'];
@@ -52,6 +56,8 @@ async function createWorkflow(workflowTemplate, tenantId) {
                 cleanWorkflow[prop] = workflow[prop];
             }
         });
+
+        console.log('🔍 [DEBUG] cleanWorkflow.name après nettoyage:', cleanWorkflow.name);
 
         // Nettoie les nodes : garde uniquement les propriétés autorisées
         if (cleanWorkflow.nodes) {
@@ -85,14 +91,21 @@ async function createWorkflow(workflowTemplate, tenantId) {
             cleanWorkflow.settings = {};
         }
 
-        // Personnalise le workflow pour ce tenant
-        if (tenantId) {
-            cleanWorkflow.name = `Email Parser - ${tenantId}`;
-            if (cleanWorkflow.nodes && cleanWorkflow.nodes[0] && cleanWorkflow.nodes[0].parameters) {
+        // Personnalise le webhook path si c'est un webhook trigger (premier node)
+        if (tenantId && cleanWorkflow.nodes && cleanWorkflow.nodes[0] && cleanWorkflow.nodes[0].parameters) {
+            // Si le premier node a un path (webhook), le personnaliser
+            if (cleanWorkflow.nodes[0].parameters.path !== undefined) {
                 cleanWorkflow.nodes[0].parameters.path = `email-${tenantId}`;
             }
         }
 
+        // Ajouter le projectId si fourni
+        if (projectId) {
+            cleanWorkflow.projectId = projectId;
+            console.log(`📁 Workflow sera créé dans le dossier: ${projectId}`);
+        }
+
+        console.log('🔍 [DEBUG] cleanWorkflow.name FINAL avant envoi à n8n:', cleanWorkflow.name);
         console.log('📤 Envoi à n8n:', JSON.stringify(cleanWorkflow, null, 2).substring(0, 500) + '...');
 
         // Crée le workflow dans n8n
@@ -117,4 +130,47 @@ async function createWorkflow(workflowTemplate, tenantId) {
     }
 }
 
-module.exports = { createCredential, createWorkflow };
+// Créer ou récupérer un dossier (project) pour un tenant
+async function createOrGetProjectFolder(companyName, tenantId) {
+    try {
+        console.log(`📁 Création/Récupération du dossier n8n pour: ${companyName}`);
+
+        // Nom du dossier
+        const folderName = companyName || `Client-${tenantId.substring(0, 8)}`;
+
+        // 1. Vérifier si le dossier existe déjà
+        const { data: projects } = await n8nAPI.get('/projects');
+        const existingProject = projects.find(p => p.name === folderName);
+
+        if (existingProject) {
+            console.log(`✅ Dossier existant trouvé: ${existingProject.name} (ID: ${existingProject.id})`);
+            return existingProject;
+        }
+
+        // 2. Créer un nouveau dossier
+        const { data: newProject } = await n8nAPI.post('/projects', {
+            name: folderName,
+            type: 'team' // ou 'personal' selon la version n8n
+        });
+
+        console.log(`✅ Nouveau dossier créé: ${newProject.name} (ID: ${newProject.id})`);
+        return newProject;
+
+    } catch (error) {
+        console.error('❌ Erreur création/récupération dossier:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        });
+
+        // Si l'API projects n'existe pas (404) ou nécessite une licence (403), retourner null
+        if (error.response?.status === 404 || error.response?.status === 403) {
+            console.log('⚠️  API projects non disponible (nécessite licence Enterprise) - workflows créés sans dossier');
+            return null;
+        }
+
+        throw new Error(`Erreur dossier n8n: ${error.response?.data?.message || error.message}`);
+    }
+}
+
+module.exports = { createCredential, createWorkflow, createOrGetProjectFolder };

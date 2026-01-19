@@ -125,21 +125,24 @@ class OAuthController {
         gmailCredential = null;
       }
 
-      // Créer automatiquement le workflow n8n
-      console.log('🤖 Création automatique du workflow n8n...');
+      // Créer automatiquement les 3 workflows n8n
+      console.log('🤖 Création automatique des workflows n8n...');
 
       let workflowResult;
       try {
         workflowResult = await workflowService.createGmailWorkflow(tenantId, gmailCredential?.id);
 
         if (workflowResult.created) {
-          console.log(`✅ Workflow créé automatiquement: ${workflowResult.workflowId}`);
+          console.log(`✅ Workflows créés automatiquement:`);
+          console.log(`  - Email Parser: ${workflowResult.emailParser}`);
+          console.log(`  - Bot Qualification: ${workflowResult.botQualification}`);
+          console.log(`  - Response Dashboard: ${workflowResult.responseDashboard}`);
         } else {
-          console.log(`⚠️  Workflow existant réutilisé: ${workflowResult.workflowId}`);
+          console.log(`⚠️  Workflows existants réutilisés: ${workflowResult.emailParser}`);
         }
       } catch (workflowError) {
-        console.error('⚠️  Erreur création workflow:', workflowError.message);
-        // On continue même si le workflow n'a pas pu être créé
+        console.error('⚠️  Erreur création workflows:', workflowError.message);
+        // On continue même si les workflows n'ont pas pu être créés
         workflowResult = { created: false, error: workflowError.message };
       }
 
@@ -148,11 +151,17 @@ class OAuthController {
         <p>Votre compte Gmail est maintenant connecté.</p>
         <p>✅ Tokens OAuth sauvegardés dans Supabase</p>
         ${workflowResult.created
-          ? `<p>✅ Workflow n8n créé automatiquement: <strong>${workflowResult.workflowId}</strong></p>
+          ? `<p>✅ 3 Workflows n8n créés automatiquement :</p>
+             <ul>
+               <li><strong>Email Parser:</strong> ${workflowResult.emailParser}</li>
+               <li><strong>Bot Qualification:</strong> ${workflowResult.botQualification}</li>
+               <li><strong>Response Dashboard:</strong> ${workflowResult.responseDashboard}</li>
+             </ul>
+             ${workflowResult.projectId ? `<p>📁 Dossier n8n: <strong>${workflowResult.projectId}</strong></p>` : ''}
              <p>🎉 Votre système est prêt ! Les emails seront traités automatiquement.</p>`
-          : workflowResult.workflowId
-            ? `<p>✅ Workflow existant: <strong>${workflowResult.workflowId}</strong></p>`
-            : `<p>⚠️  Workflow non créé automatiquement. Utilisez: <code>node create-workflow-final.js ${tenantId}</code></p>`
+          : workflowResult.emailParser
+            ? `<p>✅ Workflows existants: <strong>${workflowResult.emailParser}</strong></p>`
+            : `<p>⚠️  Workflows non créés automatiquement.</p>`
         }
         <p>Vous pouvez fermer cette fenêtre.</p>
         <script>setTimeout(() => window.close(), 5000)</script>
