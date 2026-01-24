@@ -242,6 +242,89 @@
             color: #888;
             margin-top: 5px;
         }
+
+        /* Modal pour afficher le mot de passe */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .modal-content h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .modal-content p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .password-box {
+            background: #f8f9ff;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .password-box label {
+            display: block;
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .password-value {
+            font-family: monospace;
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            letter-spacing: 2px;
+            user-select: all;
+        }
+
+        .copy-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+
+        .warning-text {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
@@ -377,6 +460,33 @@
         </div>
     </div>
 
+    <!-- Modal mot de passe -->
+    <div id="passwordModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>🔐 Votre compte a été créé !</h2>
+            <p>Notez bien vos identifiants de connexion au dashboard :</p>
+
+            <div class="password-box">
+                <label>Email</label>
+                <div class="password-value" id="modalEmail">-</div>
+            </div>
+
+            <div class="password-box">
+                <label>Mot de passe temporaire</label>
+                <div class="password-value" id="modalPassword">-</div>
+                <button class="copy-btn" onclick="copyPassword()">📋 Copier le mot de passe</button>
+            </div>
+
+            <div class="warning-text">
+                ⚠️ <strong>Important :</strong> Notez ce mot de passe maintenant ! Il ne sera plus affiché après cette étape.
+            </div>
+
+            <button class="btn btn-primary" style="margin-top: 20px; width: 100%;" onclick="closePasswordModal()">
+                J'ai noté mes identifiants, continuer →
+            </button>
+        </div>
+    </div>
+
     <script>
         const portals = [
             { name: 'Leboncoin', domain: 'leboncoin.fr', icon: '🏠' },
@@ -472,7 +582,11 @@
                     }
                     updateAccountType();
                 } else {
-                    // Nouveau tenant: sélectionner "agence" par défaut
+                    // Nouveau tenant: afficher le mot de passe temporaire
+                    if (data.temporaryPassword) {
+                        showPasswordModal(email, data.temporaryPassword);
+                    }
+                    // Sélectionner "agence" par défaut
                     document.getElementById('agenceRadio').checked = true;
                     updateAccountType();
                 }
@@ -706,6 +820,45 @@
             successDiv.textContent = message;
             successDiv.style.display = 'block';
             document.getElementById('error').style.display = 'none';
+        }
+
+        // Fonctions pour la modal du mot de passe
+        let tempPassword = '';
+
+        function showPasswordModal(email, password) {
+            tempPassword = password;
+            document.getElementById('modalEmail').textContent = email;
+            document.getElementById('modalPassword').textContent = password;
+            document.getElementById('passwordModal').style.display = 'flex';
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+        }
+
+        function copyPassword() {
+            navigator.clipboard.writeText(tempPassword).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copié !';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                // Fallback pour les navigateurs sans clipboard API
+                const textarea = document.createElement('textarea');
+                textarea.value = tempPassword;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+
+                const btn = event.target;
+                btn.textContent = '✅ Copié !';
+                setTimeout(() => {
+                    btn.textContent = '📋 Copier le mot de passe';
+                }, 2000);
+            });
         }
     </script>
 </body>

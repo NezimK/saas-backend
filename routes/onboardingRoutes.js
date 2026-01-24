@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabaseService = require('../services/supabaseService');
+const authService = require('../services/authService');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 
@@ -64,12 +65,29 @@ router.post('/get-or-create-tenant', async (req, res) => {
 
     console.log(`✅ Nouveau tenant créé: ${tenantId}`);
 
+    // Créer automatiquement un compte utilisateur manager pour le dashboard
+    const temporaryPassword = authService.generateTemporaryPassword();
+    try {
+      await authService.createUser(tenantId, {
+        email: email,
+        password: temporaryPassword,
+        firstName: 'Manager',
+        lastName: '',
+        role: 'manager'
+      });
+      console.log(`✅ Compte manager créé pour ${email}`);
+    } catch (userError) {
+      console.error('Erreur création compte manager:', userError);
+      // On continue même si la création du user échoue (le tenant est créé)
+    }
+
     res.json({
       success: true,
       tenantId,
       emailFilters: ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'],
       isExisting: false,
-      message: 'Tenant créé avec succès'
+      temporaryPassword, // Retourner le mot de passe temporaire pour l'afficher à l'utilisateur
+      message: 'Tenant et compte manager créés avec succès'
     });
 
   } catch (error) {

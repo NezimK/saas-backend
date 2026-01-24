@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 require('dotenv').config();
 
 const onboardingRoutes = require('./routes/onboardingRoutes');
@@ -6,6 +7,9 @@ const authRoutes = require('./routes/authRoutes');
 const gmailRoutes = require('./routes/gmailRoutes');
 const tokenRoutes = require('./routes/tokenRoutes');
 const syncRoutes = require('./routes/syncRoutes');
+const userAuthRoutes = require('./routes/userAuthRoutes');
+const leadsRoutes = require('./routes/leadsRoutes');
+const usersRoutes = require('./routes/usersRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,12 +23,24 @@ axios.get(`${process.env.N8N_API_URL}/workflows`, {
 .catch(err => console.error('❌ Erreur connexion n8n:', err.response?.data || err.message));
 
 // Middleware
+app.use(cors({
+  origin: [
+    'http://localhost:5173',      // Dashboard dev (Vite)
+    'http://localhost:3001',      // Dashboard server
+    'https://dashboard.emkai.fr', // Dashboard prod
+    process.env.DASHBOARD_URL     // URL configurable
+  ].filter(Boolean),
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.static('public')); // Servir les fichiers statiques (onboarding.html)
 
 // Routes
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/auth', authRoutes);
+app.use('/api/auth', userAuthRoutes); // Authentification dashboard
+app.use('/api/leads', leadsRoutes);   // CRUD leads protégé
+app.use('/api/users', usersRoutes);   // Gestion utilisateurs
 app.use('/api/gmail', gmailRoutes);
 app.use('/api/token', tokenRoutes);
 app.use('/api/sync', syncRoutes);
