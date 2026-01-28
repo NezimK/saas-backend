@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const authService = require('../services/authService');
 const supabaseService = require('../services/supabaseService');
+const magicLinkService = require('../services/magicLinkService');
+const emailService = require('../services/emailService');
 const { authMiddleware } = require('../middlewares/authMiddleware');
 
 /**
@@ -209,6 +211,265 @@ router.post('/change-password', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur change-password:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/verify-magic-link
+ * Vérifie un magic link et retourne un setup token
+ */
+router.post('/verify-magic-link', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token requis'
+      });
+    }
+
+    const user = await magicLinkService.validateMagicLink(token);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lien invalide ou expiré. Veuillez contacter le support.'
+      });
+    }
+
+    // Générer un token temporaire pour la page set-password
+    const setupToken = authService.generateSetupToken(user.id);
+
+    res.json({
+      success: true,
+      user: {
+        email: user.email,
+        name: user.first_name || user.email,
+        tenantId: user.tenant_id
+      },
+      setupToken
+    });
+  } catch (error) {
+    console.error('Erreur verify-magic-link:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/set-password
+ * Définit le mot de passe initial après le magic link
+ */
+router.post('/set-password', async (req, res) => {
+  try {
+    const { setupToken, password, magicLinkToken } = req.body;
+
+    if (!setupToken || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Setup token et mot de passe requis'
+      });
+    }
+
+    // Validation du mot de passe
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Le mot de passe doit faire au moins 8 caractères'
+      });
+    }
+
+    // Vérifier le setup token
+    const userId = authService.verifySetupToken(setupToken);
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Session expirée. Veuillez utiliser à nouveau le lien reçu par email.'
+      });
+    }
+
+    // Définir le mot de passe
+    await authService.setInitialPassword(userId, password);
+
+    // Marquer le magic link comme utilisé APRÈS la création du mot de passe
+    if (magicLinkToken) {
+      await magicLinkService.markMagicLinkAsUsed(magicLinkToken);
+    }
+
+    // Récupérer l'utilisateur complet
+    const user = await authService.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Générer les tokens d'authentification
+    const { accessToken, refreshToken } = await authService.generateTokens(user);
+
+    res.json({
+      success: true,
+      message: 'Mot de passe défini avec succès',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role,
+        tenant_id: user.tenant_id,
+        agencyName: user.tenants?.company_name || 'Mon Agence'
+      },
+      accessToken,
+      refreshToken,
+      expiresIn: 900,
+      redirectUrl: `/onboarding.html?tenantId=${user.tenant_id}`
+    });
+  } catch (error) {
+    console.error('Erreur set-password:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password
+ * Envoie un email de réinitialisation de mot de passe
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email requis'
+      });
+    }
+
+    // Chercher l'utilisateur
+    const { data: user, error: userError } = await supabaseService.supabase
+      .from('users')
+      .select('id, email, first_name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    // Toujours retourner success pour éviter l'énumération d'utilisateurs
+    if (userError || !user) {
+      console.log(`Forgot password: email ${email} non trouvé`);
+      return res.json({
+        success: true,
+        message: 'Si cet email existe, un lien de réinitialisation a été envoyé'
+      });
+    }
+
+    // Générer le magic link pour reset
+    const resetLink = await magicLinkService.generateMagicLink(user.id);
+    // Remplacer set-password par reset-password dans l'URL
+    const resetPasswordLink = resetLink.replace('set-password.html', 'reset-password.html');
+
+    // Envoyer l'email
+    const emailResult = await emailService.sendPasswordResetEmail(
+      user.email,
+      resetPasswordLink,
+      user.first_name || ''
+    );
+
+    if (!emailResult.success) {
+      console.error('Erreur envoi email reset:', emailResult.error);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi de l\'email'
+      });
+    }
+
+    console.log(`Email reset password envoyé à ${email}`);
+    res.json({
+      success: true,
+      message: 'Si cet email existe, un lien de réinitialisation a été envoyé'
+    });
+
+  } catch (error) {
+    console.error('Erreur forgot-password:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur'
+    });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Réinitialise le mot de passe avec un token valide
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token et mot de passe requis'
+      });
+    }
+
+    // Validation du mot de passe
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Le mot de passe doit faire au moins 8 caractères'
+      });
+    }
+
+    // Valider le magic link
+    const user = await magicLinkService.validateMagicLink(token);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lien invalide ou expiré. Veuillez demander un nouveau lien.'
+      });
+    }
+
+    // Mettre à jour le mot de passe
+    await authService.updatePassword(user.id, password);
+
+    // Marquer le magic link comme utilisé
+    await magicLinkService.markMagicLinkAsUsed(token);
+
+    // Générer les tokens d'authentification
+    const accessToken = authService.generateAccessToken(user);
+    const refreshToken = await authService.generateRefreshToken(user.id);
+
+    console.log(`Mot de passe réinitialisé pour ${user.email}`);
+    res.json({
+      success: true,
+      message: 'Mot de passe mis à jour avec succès',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role,
+        tenant_id: user.tenant_id,
+        agencyName: user.tenants?.company_name || 'Mon Agence'
+      },
+      accessToken,
+      refreshToken,
+      expiresIn: 900
+    });
+
+  } catch (error) {
+    console.error('Erreur reset-password:', error);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'

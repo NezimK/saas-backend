@@ -12,7 +12,7 @@ const nodemailer = require('nodemailer');
 
 const GMAIL_USER = process.env.TEST_GMAIL_USER || 'votre-email@gmail.com';
 const GMAIL_APP_PASSWORD = process.env.TEST_GMAIL_APP_PASSWORD || 'votre-app-password';
-const DESTINATION_EMAIL = process.env.WORKFLOW_GMAIL || 'email-du-workflow@gmail.com';
+const DESTINATION_EMAIL = process.env.WORKFLOW_GMAIL || 'alimekzine@emkai.fr';
 
 const leboncoinEmailHTML = `
 <!DOCTYPE html>
@@ -117,7 +117,7 @@ const leboncoinEmailHTML = `
 </html>
 `;
 
-const leboncoinEmailText = `Nouveau message pour votre annonce "Appartement  - Montpellier"
+const leboncoinEmailText = `Nouveau message pour votre annonce 
 
 Vous avez reçu un nouveau message
 
@@ -125,10 +125,7 @@ Bonjour,
 
 Jean Dupont vous a envoyé un message concernant votre annonce :
 
-Annonce : Appartement  - Montpellier
-Référence : VA109
-Prix : 385 000 €
-Localisation : Montpellier 34000
+Référence : VA001
 
 --- Message ---
 Bonjour,
@@ -181,7 +178,7 @@ async function sendFakeLeboncoinEmail() {
       address: GMAIL_USER // Gmail ne permet pas de spoofer le FROM, on utilise notre email
     },
     to: DESTINATION_EMAIL,
-    subject: 'Nouveau message pour votre annonce "Appartement T3 - Paris 15ème"',
+    subject: 'Nouveau message pour votre annonce ',
     text: leboncoinEmailText,
     html: leboncoinEmailHTML,
     // Headers pour ressembler à Leboncoin

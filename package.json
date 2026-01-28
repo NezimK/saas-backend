@@ -21,6 +21,8 @@
     "googleapis": "^169.0.0",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^7.0.12",
+    "resend": "^6.9.1",
+    "stripe": "^20.2.0",
     "uuid": "^13.0.0"
   }
 }

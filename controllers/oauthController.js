@@ -146,26 +146,9 @@ class OAuthController {
         workflowResult = { created: false, error: workflowError.message };
       }
 
-      res.send(`
-        <h1>✅ Gmail connecté avec succès !</h1>
-        <p>Votre compte Gmail est maintenant connecté.</p>
-        <p>✅ Tokens OAuth sauvegardés dans Supabase</p>
-        ${workflowResult.created
-          ? `<p>✅ 3 Workflows n8n créés automatiquement :</p>
-             <ul>
-               <li><strong>Email Parser:</strong> ${workflowResult.emailParser}</li>
-               <li><strong>Bot Qualification:</strong> ${workflowResult.botQualification}</li>
-               <li><strong>Response Dashboard:</strong> ${workflowResult.responseDashboard}</li>
-             </ul>
-             ${workflowResult.projectId ? `<p>📁 Dossier n8n: <strong>${workflowResult.projectId}</strong></p>` : ''}
-             <p>🎉 Votre système est prêt ! Les emails seront traités automatiquement.</p>`
-          : workflowResult.emailParser
-            ? `<p>✅ Workflows existants: <strong>${workflowResult.emailParser}</strong></p>`
-            : `<p>⚠️  Workflows non créés automatiquement.</p>`
-        }
-        <p>Vous pouvez fermer cette fenêtre.</p>
-        <script>setTimeout(() => window.close(), 5000)</script>
-      `);
+      // Rediriger vers l'onboarding avec le flag gmail_success
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
+      res.redirect(`${backendUrl}/onboarding.html?tenantId=${tenantId}&gmail_success=true`);
       
     } catch (error) {
       console.error('Erreur Gmail callback:', error);

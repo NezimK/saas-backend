@@ -249,6 +249,90 @@ class AuthService {
 
     return true;
   }
+
+  /**
+   * Crée un utilisateur SANS mot de passe (pour magic link)
+   * L'utilisateur devra définir son mot de passe via set-password
+   */
+  async createUserWithoutPassword(tenantId, userData) {
+    const { data, error } = await supabaseService.supabase
+      .from('users')
+      .insert({
+        tenant_id: tenantId,
+        email: userData.email.toLowerCase(),
+        password_hash: null, // Pas de mot de passe initial
+        first_name: userData.firstName || userData.companyName || null,
+        last_name: userData.lastName || null,
+        role: userData.role || 'manager',
+        requires_password_setup: true
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erreur création utilisateur sans password:', error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  /**
+   * Génère un token temporaire pour la page set-password
+   * Valide 30 minutes
+   */
+  generateSetupToken(userId) {
+    return jwt.sign(
+      { userId, purpose: 'password_setup' },
+      this.JWT_SECRET,
+      { expiresIn: '30m' }
+    );
+  }
+
+  /**
+   * Vérifie un setup token et retourne le userId
+   */
+  verifySetupToken(token) {
+    try {
+      const decoded = jwt.verify(token, this.JWT_SECRET);
+      if (decoded.purpose !== 'password_setup') {
+        return null;
+      }
+      return decoded.userId;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Définit le mot de passe initial d'un utilisateur (après magic link)
+   */
+  async setInitialPassword(userId, password) {
+    const passwordHash = await this.hashPassword(password);
+
+    const { error } = await supabaseService.supabase
+      .from('users')
+      .update({
+        password_hash: passwordHash,
+        requires_password_setup: false
+      })
+      .eq('id', userId);
+
+    if (error) {
+      throw new Error('Impossible de définir le mot de passe');
+    }
+
+    return true;
+  }
+
+  /**
+   * Génère les tokens d'authentification pour un utilisateur
+   */
+  async generateTokens(user) {
+    const accessToken = this.generateAccessToken(user);
+    const refreshToken = await this.generateRefreshToken(user.id);
+    return { accessToken, refreshToken };
+  }
 }
 
 module.exports = new AuthService();

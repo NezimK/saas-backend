@@ -1,9 +1,15 @@
 {
-	"servers": {
-		"supabase": {
-			"type": "http",
-			"url": "https://mcp.supabase.com/mcp?project_ref=yptvhkmkmjasronywviq"
-		}
-	},
-	"inputs": []
+  "servers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=yptvhkmkmjasronywviq"
+    },
+    "n8n": {
+      "type": "http",
+      "url": "https://n8n.emkai.fr/mcp-server/http",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyYWI2OGFkZC02ZjQyLTRkYWUtYjgyMi00NjUzNmM5NzFjY2YiLCJpc3MiOiJuOG4iLCJhdWQiOiJtY3Atc2VydmVyLWFwaSIsImp0aSI6Ijg3OTdiNWEwLTdmNTQtNDNkYS1iODI5LTc3OWQwNzhkZWM2OCIsImlhdCI6MTc2ODUwNDQxNn0.N8x4z7bmQ0VM3ejzV67aFgyhOvAHl1Aux13VNkcdA3A"
+      }
+    }
+  }
 }

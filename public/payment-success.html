@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paiement reussi - IMMO Copilot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --accent: #C5A065;
+            --accent-dark: #B08F55;
+            --dark-bg: #0F0F0F;
+            --dark-card: #1A1A1A;
+            --gray-900: #111111;
+            --gray-800: #1f1f1f;
+            --gray-700: #2a2a2a;
+            --gray-600: #3a3a3a;
+            --gray-500: #6b7280;
+            --gray-400: #9ca3af;
+            --gray-300: #d1d5db;
+            --success: #22c55e;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--gray-900) 0%, var(--dark-bg) 50%, var(--gray-900) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            left: 5%;
+            width: 300px;
+            height: 300px;
+            background: rgba(197, 160, 101, 0.05);
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            bottom: 10%;
+            right: 5%;
+            width: 400px;
+            height: 400px;
+            background: rgba(197, 160, 101, 0.08);
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+        }
+
+        .container {
+            background: var(--dark-card);
+            border: 1px solid var(--gray-700);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 50px 40px;
+            max-width: 550px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+            text-align: center;
+        }
+
+        .logo {
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .logo h1 .accent {
+            color: var(--accent);
+        }
+
+        .logo h1 .white {
+            color: white;
+            margin-left: 8px;
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(34, 197, 94, 0.1);
+            border: 2px solid var(--success);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 25px;
+            font-size: 40px;
+        }
+
+        h2 {
+            color: white;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        .subtitle {
+            color: var(--gray-400);
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .email-box {
+            background: var(--gray-900);
+            border: 1px solid var(--gray-700);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .email-box h3 {
+            color: var(--accent);
+            font-size: 16px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .email-box p {
+            color: var(--gray-400);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .email-box .email-address {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .steps {
+            text-align: left;
+            margin-bottom: 30px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            background: var(--accent);
+            color: black;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            color: var(--gray-300);
+            font-size: 14px;
+            line-height: 1.5;
+            padding-top: 3px;
+        }
+
+        .help-text {
+            color: var(--gray-500);
+            font-size: 13px;
+            margin-top: 20px;
+        }
+
+        .help-text a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .help-text a:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            margin-top: 30px;
+            color: var(--gray-500);
+            font-size: 13px;
+        }
+
+        /* Animation */
+        @keyframes checkmark {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon span {
+            animation: checkmark 0.5s ease-out forwards;
+        }
+
+        @media (max-width: 500px) {
+            .container {
+                padding: 30px 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>
+                <span class="accent">IMMO</span><span class="white">Copilot</span>
+            </h1>
+        </div>
+
+        <h2>Paiement reussi !</h2>
+        <p class="subtitle">
+            Merci pour votre confiance. Votre abonnement IMMO Copilot est maintenant actif.
+        </p>
+
+        <div class="email-box">
+            <h3>
+                <span>&#9993;</span>
+                Verifiez votre boite email
+            </h3>
+            <p>
+                Un email contenant votre <strong>lien de connexion</strong> vient d'etre envoye a l'adresse
+                <span class="email-address" id="customerEmail">votre email</span>.
+            </p>
+        </div>
+
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-text">Ouvrez l'email de bienvenue d'IMMO Copilot</div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-text">Cliquez sur le bouton "Finaliser mon inscription"</div>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-text">Definissez votre mot de passe et configurez votre compte</div>
+            </div>
+        </div>
+
+        <p class="help-text">
+            Vous n'avez pas recu l'email ? Verifiez vos spams ou
+            <a href="mailto:support@emkai.fr">contactez le support</a>.
+        </p>
+
+        <div class="footer">
+            &copy; 2026 EMKAI - IMMO Copilot
+        </div>
+    </div>
+
+    <script>
+        // Recuperer les infos de la session Stripe si disponibles
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session_id');
+
+        if (sessionId) {
+            // Recuperer l'email du client depuis la session Stripe
+            fetch(`/api/stripe/session/${sessionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.email) {
+                        document.getElementById('customerEmail').textContent = data.email;
+                    }
+                })
+                .catch(err => {
+                    console.log('Could not fetch session details');
+                });
+        }
+    </script>
+</body>
+</html>

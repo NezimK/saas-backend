@@ -10,6 +10,7 @@ const syncRoutes = require('./routes/syncRoutes');
 const userAuthRoutes = require('./routes/userAuthRoutes');
 const leadsRoutes = require('./routes/leadsRoutes');
 const usersRoutes = require('./routes/usersRoutes');
+const stripeRoutes = require('./routes/stripeRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,12 +28,26 @@ app.use(cors({
   origin: [
     'http://localhost:5173',      // Dashboard dev (Vite)
     'http://localhost:3001',      // Dashboard server
+    'http://127.0.0.1:5500',      // Live Server VSCode
+    'http://localhost:5500',      // Live Server VSCode (alt)
     'https://dashboard.emkai.fr', // Dashboard prod
-    process.env.DASHBOARD_URL     // URL configurable
+    'https://www.emkai.fr',       // Site marketing
+    process.env.DASHBOARD_URL,    // URL configurable
+    process.env.FRONTEND_URL      // Site marketing configurable
   ].filter(Boolean),
   credentials: true
 }));
-app.use(express.json());
+
+// IMPORTANT: Le webhook Stripe doit recevoir le body brut AVANT express.json()
+// Le middleware express.raw est appliqué directement dans stripeRoutes.js pour /webhook
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/stripe/webhook') {
+    next(); // Skip express.json() for Stripe webhook
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
 app.use(express.static('public')); // Servir les fichiers statiques (onboarding.html)
 
 // Routes
@@ -44,6 +59,7 @@ app.use('/api/users', usersRoutes);   // Gestion utilisateurs
 app.use('/api/gmail', gmailRoutes);
 app.use('/api/token', tokenRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/stripe', stripeRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

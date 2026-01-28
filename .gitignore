@@ -23,6 +23,8 @@ migrations/
 
 # Workflows n8n (exports JSON)
 workflows/
+final_workflows/
+new_workflows/
 
 champ.txt
 

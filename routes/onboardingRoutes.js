@@ -252,6 +252,63 @@ router.post('/update-filters', async (req, res) => {
 });
 
 /**
+ * GET /api/onboarding/tenant/:tenantId
+ * Recupere les informations completes d'un tenant pour l'onboarding
+ */
+router.get('/tenant/:tenantId', async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        error: 'tenantId requis'
+      });
+    }
+
+    console.log(`Chargement tenant pour onboarding: ${tenantId}`);
+
+    const { data: tenant, error } = await supabaseService.supabase
+      .from('tenants')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (error || !tenant) {
+      console.error('Tenant non trouve:', tenantId, error);
+      return res.status(404).json({
+        success: false,
+        error: 'Tenant non trouve. Veuillez utiliser le lien recu par email.'
+      });
+    }
+
+    console.log(`Tenant charge: ${tenant.company_name}`);
+
+    res.json({
+      success: true,
+      tenant: {
+        tenant_id: tenant.tenant_id,
+        email: tenant.email,
+        company_name: tenant.company_name,
+        account_type: tenant.account_type,
+        plan: tenant.plan,
+        status: tenant.status,
+        email_filters: tenant.email_filters || [],
+        api_key: tenant.api_key ? '***configured***' : null,
+        api_status: tenant.api_status
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur get tenant:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur serveur'
+    });
+  }
+});
+
+/**
  * GET /api/onboarding/filters/:tenantId
  * Récupère les filtres email d'un tenant
  */
@@ -276,6 +333,50 @@ router.get('/filters/:tenantId', async (req, res) => {
 
   } catch (error) {
     console.error('Erreur get-filters:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/onboarding/validate-netty-api
+ * Valide la clé API Netty et la sauvegarde
+ */
+/**
+ * POST /api/onboarding/complete
+ * Marque l'onboarding comme termine et retourne l'URL du dashboard
+ */
+router.post('/complete', async (req, res) => {
+  try {
+    const { tenantId } = req.body;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenantId requis' });
+    }
+
+    console.log(`Finalisation onboarding pour tenant: ${tenantId}`);
+
+    const { error } = await supabaseService.supabase
+      .from('tenants')
+      .update({
+        status: 'active',
+        onboarding_completed_at: new Date().toISOString()
+      })
+      .eq('tenant_id', tenantId);
+
+    if (error) {
+      console.error('Erreur finalisation onboarding:', error);
+      return res.status(500).json({ error: 'Erreur lors de la finalisation' });
+    }
+
+    console.log(`Onboarding termine pour tenant: ${tenantId}`);
+
+    res.json({
+      success: true,
+      dashboardUrl: process.env.DASHBOARD_URL || 'http://localhost:5173'
+    });
+
+  } catch (error) {
+    console.error('Erreur complete:', error);
     res.status(500).json({ error: error.message });
   }
 });
