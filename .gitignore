@@ -18,6 +18,40 @@ Thumbs.db
 !.vscode/mcp.json
 .idea/
 
+# AI/Agent IDE configurations
+.agent/
+.agents/
+.claude/
+.cline/
+.codebuddy/
+.codex/
+.commandcode/
+.continue/
+.crush/
+.cursor/
+.factory/
+.gemini/
+.github/
+.goose/
+.junie/
+.kilocode/
+.kiro/
+.kode/
+.mcpjam/
+.mux/
+.neovate/
+.opencode/
+.openhands/
+.pi/
+.pochi/
+.qoder/
+.qwen/
+.roo/
+.trae/
+.windsurf/
+.zencoder/
+skills/
+
 # Migrations SQL (contiennent des données sensibles ou temporaires)
 migrations/
 
