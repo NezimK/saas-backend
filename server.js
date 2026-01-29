@@ -30,8 +30,13 @@ app.use(cors({
     'http://localhost:3001',      // Dashboard server
     'http://127.0.0.1:5500',      // Live Server VSCode
     'http://localhost:5500',      // Live Server VSCode (alt)
+    'http://127.0.0.1:5501',      // Live Server VSCode (autre port)
+    'http://localhost:5501',      // Live Server VSCode (autre port alt)
     'https://dashboard.emkai.fr', // Dashboard prod
     'https://www.emkai.fr',       // Site marketing
+    'http://www.emkai.fr',        // Site marketing HTTP
+    'https://emkai.fr',           // Site marketing sans www
+    'http://emkai.fr',            // Site marketing sans www HTTP
     process.env.DASHBOARD_URL,    // URL configurable
     process.env.FRONTEND_URL      // Site marketing configurable
   ].filter(Boolean),

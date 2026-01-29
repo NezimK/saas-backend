@@ -93,7 +93,7 @@ async function sendMagicLinkEmail(email, magicLink, companyName) {
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2025 EMKAI - IMMO Copilot | Tous droits reserves
+                &copy; 2026 EMKAI - IMMO Copilot | Tous droits reserves
               </p>
             </td>
           </tr>
@@ -162,7 +162,7 @@ async function sendWelcomeEmail(email, companyName, dashboardUrl) {
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2025 EMKAI - IMMO Copilot
+                &copy; 2026 EMKAI - IMMO Copilot
               </p>
             </td>
           </tr>
@@ -273,7 +273,7 @@ async function sendPasswordResetEmail(email, resetLink, userName = '') {
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2025 EMKAI - IMMO Copilot | Tous droits reserves
+                &copy; 2026 EMKAI - IMMO Copilot | Tous droits reserves
               </p>
             </td>
           </tr>

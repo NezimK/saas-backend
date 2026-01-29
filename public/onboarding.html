@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -363,7 +364,9 @@
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .loading-text {
@@ -406,6 +409,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="logo">
@@ -476,13 +480,10 @@
 
                 <div class="input-group">
                     <label for="apiKeyInput">Votre cle API Netty</label>
-                    <input
-                        type="text"
-                        id="apiKeyInput"
-                        placeholder="Collez votre cle API ici"
-                        onkeypress="if(event.key === 'Enter') validateNettyAPI()"
-                    >
-                    <div class="help-text">Cette cle permet a IMMO Copilot de synchroniser vos biens automatiquement</div>
+                    <input type="text" id="apiKeyInput" placeholder="Collez votre cle API ici"
+                        onkeypress="if(event.key === 'Enter') validateNettyAPI()">
+                    <div class="help-text">Cette cle permet a IMMO Copilot de synchroniser vos biens automatiquement
+                    </div>
                 </div>
 
                 <button class="btn btn-primary" id="validateNettyBtn" onclick="validateNettyAPI()">
@@ -492,7 +493,8 @@
 
             <!-- Etape 2: Selection des portails -->
             <div id="portalsStep" style="display: none;">
-                <p class="subtitle" style="margin-bottom: 20px;">Selectionnez les portails immobiliers dont vous souhaitez recevoir les notifications</p>
+                <p class="subtitle" style="margin-bottom: 20px;">Selectionnez les portails immobiliers dont vous
+                    souhaitez recevoir les notifications</p>
 
                 <div class="portals-grid" id="portalsGrid">
                     <!-- Les portails seront ajoutes dynamiquement -->
@@ -532,7 +534,7 @@
             </div>
 
             <div class="footer">
-                &copy; 2025 EMKAI - IMMO Copilot
+                &copy; 2026 EMKAI - IMMO Copilot
             </div>
         </div>
     </div>
@@ -834,4 +836,5 @@
         initOnboarding();
     </script>
 </body>
+
 </html>
