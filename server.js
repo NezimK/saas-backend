@@ -11,6 +11,7 @@ const userAuthRoutes = require('./routes/userAuthRoutes');
 const leadsRoutes = require('./routes/leadsRoutes');
 const usersRoutes = require('./routes/usersRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
+const calendarRoutes = require('./routes/calendarRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -65,6 +66,7 @@ app.use('/api/gmail', gmailRoutes);
 app.use('/api/token', tokenRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api', calendarRoutes);      // Calendar OAuth (Google, Outlook)
 
 // Health check
 app.get('/health', (req, res) => {
@@ -76,4 +78,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
   console.log(`📡 Endpoint onboarding: http://localhost:${PORT}/api/onboarding/create-tenant`);
   console.log(`📧 OAuth Gmail: http://localhost:${PORT}/auth/gmail/connect?tenantId=XXX`);
+  console.log(`📅 OAuth Google Calendar: http://localhost:${PORT}/api/auth/google/callback`);
+  console.log(`📅 OAuth Outlook Calendar: http://localhost:${PORT}/api/auth/outlook/callback`);
 });

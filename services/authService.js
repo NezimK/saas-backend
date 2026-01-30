@@ -279,13 +279,13 @@ class AuthService {
 
   /**
    * Génère un token temporaire pour la page set-password
-   * Valide 30 minutes
+   * Valide 24 heures pour les invitations
    */
-  generateSetupToken(userId) {
+  generateSetupToken(userId, expiresIn = '24h') {
     return jwt.sign(
       { userId, purpose: 'password_setup' },
       this.JWT_SECRET,
-      { expiresIn: '30m' }
+      { expiresIn }
     );
   }
 

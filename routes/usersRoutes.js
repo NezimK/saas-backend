@@ -8,6 +8,7 @@ const router = express.Router();
 const { authMiddleware, requireRole } = require('../middlewares/authMiddleware');
 const authService = require('../services/authService');
 const supabaseService = require('../services/supabaseService');
+const { sendInvitationEmail } = require('../services/emailService');
 
 // Toutes les routes nécessitent une authentification
 router.use(authMiddleware);
@@ -47,6 +48,7 @@ router.get('/', async (req, res) => {
       lastName: user.last_name,
       role: user.role,
       isActive: user.is_active,
+      requiresPasswordSetup: user.requires_password_setup,
       lastLogin: user.last_login,
       createdAt: user.created_at
     }));
@@ -92,18 +94,19 @@ router.get('/agents', async (req, res) => {
 
 /**
  * POST /api/users
- * Crée un nouvel utilisateur (managers et admins uniquement)
+ * Crée un nouvel utilisateur par invitation email (managers et admins uniquement)
+ * L'utilisateur recevra un email avec un lien pour définir son mot de passe
  */
 router.post('/', requireRole('manager', 'admin'), async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role } = req.body;
+    const { email, firstName, lastName, role } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, error: 'Email et mot de passe requis' });
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email requis' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ success: false, error: 'Le mot de passe doit faire au moins 8 caractères' });
+    if (!firstName || !lastName) {
+      return res.status(400).json({ success: false, error: 'Prénom et nom requis' });
     }
 
     // Les managers ne peuvent créer que des agents
@@ -123,13 +126,40 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
       return res.status(409).json({ success: false, error: 'Un utilisateur avec cet email existe déjà' });
     }
 
-    const user = await authService.createUser(req.user.tenantId, {
+    // Créer l'utilisateur sans mot de passe (invitation flow)
+    const user = await authService.createUserWithoutPassword(req.user.tenantId, {
       email,
-      password,
       firstName,
       lastName,
       role: userRole
     });
+
+    // Récupérer les infos du tenant pour l'email
+    const { data: tenant } = await supabaseService.supabase
+      .from('tenants')
+      .select('company_name')
+      .eq('tenant_id', req.user.tenantId)
+      .single();
+
+    // Générer le token d'invitation (valide 24h)
+    const inviteToken = authService.generateSetupToken(user.id);
+
+    // Construire le lien d'invitation (vers le frontend, pas le backend)
+    const baseUrl = process.env.DASHBOARD_URL || 'http://localhost:5173';
+    const inviteLink = `${baseUrl}/set-password?token=${inviteToken}`;
+
+    // Envoyer l'email d'invitation
+    const emailResult = await sendInvitationEmail(
+      email,
+      inviteLink,
+      req.user.name,
+      tenant?.company_name || 'votre agence',
+      firstName
+    );
+
+    if (!emailResult.success) {
+      console.warn('Email d\'invitation non envoyé:', emailResult.error);
+    }
 
     res.status(201).json({
       success: true,
@@ -137,9 +167,15 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
         id: user.id,
         email: user.email,
         name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        role: user.role
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role,
+        requiresPasswordSetup: true
       },
-      message: 'Utilisateur créé avec succès'
+      emailSent: emailResult.success,
+      message: emailResult.success
+        ? 'Invitation envoyée par email'
+        : 'Utilisateur créé mais email non envoyé'
     });
   } catch (error) {
     console.error('Erreur POST /api/users:', error);
