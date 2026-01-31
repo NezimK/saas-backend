@@ -428,6 +428,21 @@ router.post('/validate-netty-api', async (req, res) => {
 
         console.log(`✅ Clé API Netty sauvegardée pour ${tenantId}`);
 
+        // Déclencher la synchronisation Netty via n8n
+        try {
+          console.log(`🚀 Déclenchement sync Netty pour ${tenantId}...`);
+          await axios.post('https://n8n.emkai.fr/webhook/sync-netty-single', {
+            tenant_id: tenantId
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000 // Timeout court pour ne pas bloquer la réponse
+          });
+          console.log(`✅ Sync Netty déclenché pour ${tenantId}`);
+        } catch (syncError) {
+          // Log l'erreur mais ne bloque pas la réponse
+          console.error(`⚠️ Erreur déclenchement sync Netty: ${syncError.message}`);
+        }
+
         return res.json({
           success: true,
           message: 'Clé API Netty validée et sauvegardée',

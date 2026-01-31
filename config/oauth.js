@@ -4,7 +4,7 @@ module.exports = {
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/gmail/callback',
+    redirectUri: process.env.GMAIL_REDIRECT_URI || 'http://localhost:3000/auth/gmail/callback',
     scopes: [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://mail.google.com/'
