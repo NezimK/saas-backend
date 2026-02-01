@@ -1,0 +1,1753 @@
+{
+  "name": "Bot Qualification - Multi-tenant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bot-qualification-multitenant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook - Incoming WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -5376,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "14dc048a-c524-4bee-9708-0522493bf8be",
+      "webhookId": "bot-qualification-multitenant"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraire le numéro WhatsApp du tenant depuis le payload Twilio\nconst toRaw = $input.first().json.body.To || '';\n// Nettoyer : \"whatsapp:+33644603577\" → \"+33644603577\"\nconst whatsappNumber = toRaw.replace('whatsapp:', '');\n\nif (!whatsappNumber) {\n  throw new Error('Numéro WhatsApp tenant non trouvé dans le payload');\n}\n\nreturn [{ json: { whatsapp_number: whatsappNumber } }];"
+      },
+      "name": "Extract Tenant Number",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -5152,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "d3591de5-8676-4fb8-8dc7-add606c7eccf"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "tenants",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "whatsapp_number",
+              "condition": "eq",
+              "keyValue": "={{ $json.whatsapp_number }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Tenant",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -4928,
+        384
+      ],
+      "typeVersion": 1,
+      "id": "715046f0-18e8-474f-bf81-ab9342fe4751",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tenant-exists",
+              "leftValue": "={{ $json.tenant_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tenant Exists?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -4704,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "c06ed5f2-dff0-4c15-930d-8af1897401d9"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -4480,
+        288
+      ],
+      "typeVersion": 1.4,
+      "id": "ea60fad5-294f-4de2-960a-3be7db02ff1f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: 'Tenant not found', whatsapp_number: $('Extract Tenant Number').item.json.whatsapp_number }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "name": "Respond Tenant Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -4480,
+        480
+      ],
+      "typeVersion": 1.4,
+      "id": "4f516296-1df6-4d7d-86c9-f4ba9fb2ead2"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        -4256,
+        288
+      ],
+      "typeVersion": 1.1,
+      "id": "8561d530-a7cf-41e9-af15-9e8da2e35d1d",
+      "webhookId": "175653d6-f325-4bf5-91b7-565c2fd4d7dc"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook - Incoming WhatsApp').item.json.body.From.replace('whatsapp:', '') }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Lead Context",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -4032,
+        288
+      ],
+      "typeVersion": 1,
+      "id": "e0d9fe6c-0224-42d9-9105-1753ab98a503",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "pause-ai-true",
+                    "leftValue": "={{ $json.pause_ai }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "pause-ai-false",
+                    "leftValue": "={{ $json.pause_ai }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Pause IA ?",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -3808,
+        288
+      ],
+      "typeVersion": 3.3,
+      "id": "b47e7d0f-d117-4c37-89e9-bbd3750a8a23"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Récup message Client\nconst userMessage = $('Webhook - Incoming WhatsApp').item.json.body.Body;\n\n// 2. Récup Historique\nlet history = [];\ntry {\n  const rawHistory = $('Get Lead Context').item.json.conversation_json;\n  history = typeof rawHistory === 'string' ? JSON.parse(rawHistory) : rawHistory;\n} catch (e) { history = []; }\n\n// 3. Ajout message Client SEULEMENT\nhistory.push({\n  role: \"user\",\n  text: userMessage,\n  time: new Date().toISOString()\n});\n\n// 4. Sortie\nreturn {\n  json: {\n    updated_history_json: JSON.stringify(history)\n  }\n};"
+      },
+      "name": "Save Only",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -3584,
+        96
+      ],
+      "typeVersion": 2,
+      "id": "ce99c29b-f497-4f58-8066-f3cba29459c0"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $json.updated_history_json }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Last Response",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -3360,
+        96
+      ],
+      "typeVersion": 1,
+      "id": "309a4f8c-8ed3-42c0-9b11-7e40d957874e",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $('Get Lead Context').item.json.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Check Lead Exists",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -3584,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "6ec3a372-d43b-4039-89db-41fc54622180"
+    },
+    {
+      "parameters": {},
+      "name": "Stop - Unknown Lead",
+      "type": "n8n-nodes-base.noOp",
+      "position": [
+        -3360,
+        480
+      ],
+      "typeVersion": 1,
+      "id": "8e1d006f-05a1-4382-8d7e-73af36097738"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "qualified-check",
+              "leftValue": "={{ $('Get Lead Context').item.json.status }}",
+              "rightValue": "QUALIFIED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Check Lead Qualified",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -3360,
+        288
+      ],
+      "typeVersion": 2.2,
+      "id": "0eed47e0-43b8-4d3e-859a-1736df3fc17f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Récupérer le dernier message du client\nconst userMessage = $('Webhook - Incoming WhatsApp').item.json.body.Body;\n\n// 2. Récupérer l'historique existant\nlet history = [];\ntry {\n  const rawHistory = $('Get Lead Context').item.json.conversation_json;\n  if (rawHistory) {\n    history = typeof rawHistory === 'string' ? JSON.parse(rawHistory) : rawHistory;\n  }\n} catch (e) {\n  history = [];\n}\n\n// 3. Ajouter UNIQUEMENT le message du client\nhistory.push({\n  role: \"user\",\n  text: userMessage,\n  time: new Date().toISOString()\n});\n\n// 4. Sortie\nreturn {\n  json: {\n    updated_history_json: JSON.stringify(history)\n  }\n};"
+      },
+      "name": "Code in JavaScript1",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -3136,
+        144
+      ],
+      "typeVersion": 2,
+      "id": "1ac85861-008c-4ba3-b2bb-7b894a03d770"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $json.updated_history_json }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Qualified Lead message",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -2912,
+        144
+      ],
+      "typeVersion": 1,
+      "id": "8b71aa79-62e3-4878-94ed-f753a54a5ca2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "thread-check",
+              "leftValue": "={{ $json.thread_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Check Thread Exists",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -3136,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "23ab6da0-dec1-4cf5-9794-ce357e64b7e6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/threads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "OpenAI-Beta",
+              "value": "assistants=v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP - Create Thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -2912,
+        464
+      ],
+      "typeVersion": 4.2,
+      "id": "3339fbff-92b4-4c5d-9a12-3dff9f0cf0f9",
+      "credentials": {
+        "openAiApi": {
+          "id": "dV20N0rtAcFtSGbw",
+          "name": "RealAgency - Dashboard"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "thread_id",
+              "fieldValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "name": "UpdateThread ID",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -2688,
+        464
+      ],
+      "typeVersion": 1,
+      "id": "c794d344-e130-4754-9535-b39810848def",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "biens",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "ref_externe",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.property_reference }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Property",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -2464,
+        384
+      ],
+      "typeVersion": 1,
+      "id": "34677364-63cc-4b68-bc42-7f07affff5ae",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.openai.com/v1/threads/{{ $('HTTP - Create Thread').isExecuted ? $('HTTP - Create Thread').item.json.id : $('Get Lead Context').item.json.thread_id }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "OpenAI-Beta",
+              "value": "assistants=v2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"role\": \"user\",\n  \"content\": \"{{ $('Webhook - Incoming WhatsApp').item.json.body.Body }}\"\n}",
+        "options": {}
+      },
+      "name": "HTTP - Add Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -2240,
+        384
+      ],
+      "typeVersion": 4.2,
+      "id": "ffc555c0-7e6f-4024-9c9c-a1e38a7aa469",
+      "credentials": {
+        "openAiApi": {
+          "id": "dV20N0rtAcFtSGbw",
+          "name": "RealAgency - Dashboard"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.openai.com/v1/threads/{{ $('HTTP - Add Message').item.json.thread_id }}/runs",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "OpenAI-Beta",
+              "value": "assistants=v2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n(() => {\n  const data = $('Get Property').item.json;\n  const lead = $('Get Lead Context').item.json;\n  const tenant = $('Get Tenant').item.json;\n  \n  const desc = (data.description || \"Non spécifié\").toString().replace(/[\\r\\n]+/g, \" \").replace(/\"/g, \"'\").replace(/\\\\/g, \"\");\n  const prix = data.prix_vente || \"\";\n  \n  const project = lead.project || \"NON_DETECTÉ\";\n  const financing = lead.financing || \"NON_DETECTÉ\";\n  const timing = lead.timing || \"NON_DETECTÉ\";\n  \n  const instructions = \"CONTEXTE DU BIEN : <BIEN> \" + desc + \" - prix: \" + prix + \"€ </BIEN> | ÉTAT QUALIFICATION ACTUEL : project=\" + project + \", financing=\" + financing + \", timing=\" + timing + \" | IMPORTANT: Si une info est différente de NON_DETECTÉ, elle est déjà collectée, passe à la suivante.\";\n\n  return JSON.stringify({\n    \"assistant_id\": tenant.openai_assistant_id,\n    \"additional_instructions\": instructions\n  });\n})()\n}}",
+        "options": {}
+      },
+      "name": "HTTP - Run Assistant",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -2016,
+        384
+      ],
+      "typeVersion": 4.2,
+      "id": "eca99d5c-6783-4ee6-9d63-286ffd3659a2",
+      "credentials": {
+        "openAiApi": {
+          "id": "dV20N0rtAcFtSGbw",
+          "name": "RealAgency - Dashboard"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "name": "Wait 2s",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        -1792,
+        384
+      ],
+      "typeVersion": 1.1,
+      "id": "45b06514-f6b5-473d-9199-53f0af7f3a0c",
+      "webhookId": "1f3a0e54-48ba-4b2f-af21-b3c9a705391a"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.openai.com/v1/threads/{{ $('HTTP - Run Assistant').item.json.thread_id }}/runs/{{ $('HTTP - Run Assistant').item.json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "OpenAI-Beta",
+              "value": "assistants=v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP - Check Run Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -1568,
+        320
+      ],
+      "typeVersion": 4.2,
+      "id": "93828432-f1f2-4301-9fe0-92aa290f02f2",
+      "credentials": {
+        "openAiApi": {
+          "id": "dV20N0rtAcFtSGbw",
+          "name": "RealAgency - Dashboard"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "status-completed",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "status-progress",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "in_progress",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "id": "status-queued",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "queued",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "or"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Switch - Run Status",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -1344,
+        384
+      ],
+      "typeVersion": 3,
+      "id": "463074e9-fe6a-4a60-99f3-5976397f440d"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.openai.com/v1/threads/{{ $('HTTP - Run Assistant').item.json.thread_id }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "OpenAI-Beta",
+              "value": "assistants=v2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP - List Messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -1120,
+        384
+      ],
+      "typeVersion": 4.2,
+      "id": "7626fa80-7ba8-4598-82c7-8aa34b98dc42",
+      "credentials": {
+        "openAiApi": {
+          "id": "dV20N0rtAcFtSGbw",
+          "name": "RealAgency - Dashboard"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Récupération\nconst messages = $input.first().json.data;\nconst lastMessage = messages[0];\nconst rawContent = lastMessage.content[0].text.value;\n\n// 2. Contexte Lead\nconst leadContext = $('Get Lead Context').first().json;\nconst prenom = leadContext.first_name || \"Le prospect\";\nconst refBien = leadContext.property_reference || \"le bien\";\n\n// 3. Init avec PERSISTANCE\nlet output = {\n  type: \"MESSAGE\",\n  content: rawContent,\n  summary: \"\",\n  score: \"NON_DEFINI\",\n  final_message_text: \"\",\n  timeline: leadContext.timeline || \"\",\n  project: leadContext.project || \"\",\n  financing: leadContext.financing || \"\"\n};\n\ntry {\n  const jsonMatch = rawContent.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    const jsonString = jsonMatch[0];\n    const parsedData = JSON.parse(jsonString);\n    const data = parsedData.data || {};\n\n    if (parsedData.message) {\n      output.content = parsedData.message;\n    }\n\n    if (data.timing) output.timeline = data.timing;\n    if (data.projet) output.project = data.projet;\n    if (data.financement) output.financing = data.financement;\n\n    if (parsedData.qualification_complete === true || (output.project && output.financing && output.timeline)) {\n      output.type = \"QUALIFIED\";\n      output.content = null;\n\n      const fin = (output.financing || \"\").toUpperCase();\n      const del = (output.timeline || \"\").toUpperCase();\n\n      if ((fin.includes(\"VALID\") || fin.includes(\"CASH\")) && del.includes(\"< 4\")) {\n        output.score = \"HOT\";\n      } else if (fin.includes(\"NON\") || fin.includes(\"REFUS\")) {\n        output.score = \"COLD\";\n      } else {\n        output.score = data.score || \"WARM\";\n      }\n\n      if (output.score === \"HOT\") {\n        output.final_message_text = \"Parfait ! Je transmets votre dossier à mon agent. Il vous contactera d'ici peu.\";\n      } else if (output.score === \"WARM\") {\n        output.final_message_text = \"C'est noté ! Je transmet votre dossier à nos agents.\";\n      } else {\n        output.final_message_text = \"C'est noté ! Je transmet votre dossier à nos agents.\";\n      }\n\n      output.summary = `${prenom} est intéressé(e) par le bien ${refBien}.\\n Capacité d'achat : ${output.financing}. Timing : ${output.timeline}.`;\n    }\n  }\n} catch (e) {\n  output.content = rawContent;\n}\n\nreturn [{ \n  json: output,\n  pairedItem: { item: 0 }\n}];"
+      },
+      "name": "Code - Extract AI Response",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -896,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "d07228f4-2aff-4e86-9a64-94945e9fd79c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Récupération des données\nconst aiData = $input.first().json; \nconst userMessage = $('Webhook - Incoming WhatsApp').first().json.body.Body;\n\n// 2. Récupération historique Supabase\nlet history = [];\ntry {\n  const rawHistory = $('Get Lead Context').item.json.conversation_json;\n  if (rawHistory) {\n    history = typeof rawHistory === 'string' ? JSON.parse(rawHistory) : rawHistory;\n  }\n} catch (e) {\n  history = [];\n}\n\n// 3. Ajout du message CLIENT (User)\nhistory.push({\n  role: \"user\",\n  text: userMessage,\n  time: new Date().toISOString()\n});\n\n// 4. LOGIQUE PRINCIPALE\nif (aiData.type === \"QUALIFIED\") {\n  const messageDeFin = aiData.final_message_text;\n  \n  history.push({\n    role: \"assistant\",\n    text: messageDeFin,\n    time: new Date().toISOString()\n  });\n  \n  history.push({\n    role: \"system\",\n    text: \"--- QUALIFICATION TERMINÉE (\" + aiData.score + \") ---\",\n    time: new Date().toISOString()\n  });\n\n} else if (aiData.content) {\n  history.push({\n    role: \"assistant\",\n    text: aiData.content,\n    time: new Date().toISOString()\n  });\n}\n\n// 5. SORTIE\nreturn {\n  json: {\n    ...aiData,\n    updated_history_json: JSON.stringify(history)\n  }\n};"
+      },
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -672,
+        384
+      ],
+      "typeVersion": 2,
+      "id": "dac65326-5514-48e5-9130-b3ef4744e49d"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "cond-qualified",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "QUALIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "cond-conversation",
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "QUALIFIED",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notContains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Switch - Response Type",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -448,
+        384
+      ],
+      "typeVersion": 3,
+      "id": "88ba1a42-58e7-4b23-b897-23cb6115c2ae"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "score-hot",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": "HOT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "score-warm",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": "WARM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "score-cold",
+                    "leftValue": "={{ $json.score }}",
+                    "rightValue": "COLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Check scores",
+      "type": "n8n-nodes-base.switch",
+      "position": [
+        -224,
+        272
+      ],
+      "typeVersion": 3.3,
+      "id": "d04d39f4-ea82-4602-a2b7-7ca9e3a15c13"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Extract Tenant Number').item.json.whatsapp_number }}",
+        "to": "={{ $('Get Lead Context').item.json.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $('Code in JavaScript').item.json.content }}",
+        "options": {}
+      },
+      "name": "Send WhatsApp - Conversation",
+      "type": "n8n-nodes-base.twilio",
+      "position": [
+        -224,
+        576
+      ],
+      "typeVersion": 1,
+      "id": "d4d101f9-e8c7-4657-94fc-26d5078f87c9",
+      "credentials": {
+        "twilioApi": {
+          "id": "UxCNprVyrXSYQCAL",
+          "name": "Twilio account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Extract Tenant Number').item.json.whatsapp_number }}",
+        "to": "={{ $('Get Lead Context').item.json.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $('Code in JavaScript').item.json.final_message_text }}",
+        "options": {}
+      },
+      "name": "Send WhatsApp - HOT",
+      "type": "n8n-nodes-base.twilio",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "40ec4a3b-d307-4cae-b55b-cb973152f6ab",
+      "credentials": {
+        "twilioApi": {
+          "id": "UxCNprVyrXSYQCAL",
+          "name": "Twilio account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Extract Tenant Number').item.json.whatsapp_number }}",
+        "to": "={{ $('Get Lead Context').item.json.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $('Code in JavaScript').item.json.final_message_text }}",
+        "options": {}
+      },
+      "name": "Send WhatsApp - WARM",
+      "type": "n8n-nodes-base.twilio",
+      "position": [
+        0,
+        192
+      ],
+      "typeVersion": 1,
+      "id": "33845a9d-9168-43d8-9e14-8e6829c81a6b",
+      "credentials": {
+        "twilioApi": {
+          "id": "UxCNprVyrXSYQCAL",
+          "name": "Twilio account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Extract Tenant Number').item.json.whatsapp_number }}",
+        "to": "={{ $('Get Lead Context').item.json.phone }}",
+        "toWhatsapp": true,
+        "message": "={{ $('Code in JavaScript').item.json.final_message_text }}",
+        "options": {}
+      },
+      "name": "Send WhatsApp - COLD",
+      "type": "n8n-nodes-base.twilio",
+      "position": [
+        0,
+        384
+      ],
+      "typeVersion": 1,
+      "id": "26f147f5-d7f2-4b95-8a3a-db0b51d5e70c",
+      "credentials": {
+        "twilioApi": {
+          "id": "UxCNprVyrXSYQCAL",
+          "name": "Twilio account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP - Add Message').item.json.thread_id }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "In_Progress"
+            },
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.updated_history_json }}"
+            },
+            {
+              "fieldId": "financing",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.financing }}"
+            },
+            {
+              "fieldId": "project",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.project }}"
+            },
+            {
+              "fieldId": "timeline",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.timeline }}"
+            },
+            {
+              "fieldId": "pause_ai",
+              "fieldValue": "false"
+            }
+          ]
+        }
+      },
+      "name": "Update a row",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        0,
+        576
+      ],
+      "typeVersion": 1,
+      "id": "06c187cc-8d1f-49a1-9a8a-d084fe6e762e",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP - Add Message').item.json.thread_id }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "QUALIFIED"
+            },
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.updated_history_json }}"
+            },
+            {
+              "fieldId": "financing",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.financing }}"
+            },
+            {
+              "fieldId": "project",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.project }}"
+            },
+            {
+              "fieldId": "timeline",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.timeline }}"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.summary }}"
+            },
+            {
+              "fieldId": "pause_ai",
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": "score",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.score }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Lead HOT",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        224,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "658d3564-2375-4f88-afd1-e80e60f23848",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP - Add Message').item.json.thread_id }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "QUALIFIED"
+            },
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.updated_history_json }}"
+            },
+            {
+              "fieldId": "financing",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.financing }}"
+            },
+            {
+              "fieldId": "project",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.project }}"
+            },
+            {
+              "fieldId": "timeline",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.timeline }}"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.summary }}"
+            },
+            {
+              "fieldId": "pause_ai",
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": "score",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.score }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Lead WARM",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        224,
+        192
+      ],
+      "typeVersion": 1,
+      "id": "11b3314a-6ac2-4b66-b4e5-8de70076653a",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $('HTTP - Add Message').item.json.thread_id }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead Context').item.json.phone }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "status",
+              "fieldValue": "QUALIFIED"
+            },
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.updated_history_json }}"
+            },
+            {
+              "fieldId": "financing",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.financing }}"
+            },
+            {
+              "fieldId": "project",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.project }}"
+            },
+            {
+              "fieldId": "timeline",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.timeline }}"
+            },
+            {
+              "fieldId": "notes",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.summary }}"
+            },
+            {
+              "fieldId": "pause_ai",
+              "fieldValue": "false"
+            },
+            {
+              "fieldId": "score",
+              "fieldValue": "={{ $('Code in JavaScript').item.json.score }}"
+            }
+          ]
+        }
+      },
+      "name": "Update Lead COLD",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        224,
+        384
+      ],
+      "typeVersion": 1,
+      "id": "48556278-69bb-4405-8bc6-02090c2d41cf",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Incoming WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Extract Tenant Number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Tenant Number": {
+      "main": [
+        [
+          {
+            "node": "Get Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tenant": {
+      "main": [
+        [
+          {
+            "node": "Tenant Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tenant Exists?": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Tenant Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Context": {
+      "main": [
+        [
+          {
+            "node": "Pause IA ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause IA ?": {
+      "main": [
+        [
+          {
+            "node": "Save Only",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Lead Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Only": {
+      "main": [
+        [
+          {
+            "node": "Update Last Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lead Exists": {
+      "main": [
+        [
+          {
+            "node": "Check Lead Qualified",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - Unknown Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lead Qualified": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Thread Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Update Qualified Lead message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Thread Exists": {
+      "main": [
+        [
+          {
+            "node": "Get Property",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP - Create Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Create Thread": {
+      "main": [
+        [
+          {
+            "node": "UpdateThread ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdateThread ID": {
+      "main": [
+        [
+          {
+            "node": "Get Property",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Property": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Add Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Add Message": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Run Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Run Assistant": {
+      "main": [
+        [
+          {
+            "node": "Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2s": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Check Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Check Run Status": {
+      "main": [
+        [
+          {
+            "node": "Switch - Run Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Run Status": {
+      "main": [
+        [
+          {
+            "node": "HTTP - List Messages",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 2s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - List Messages": {
+      "main": [
+        [
+          {
+            "node": "Code - Extract AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Extract AI Response": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch - Response Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Response Type": {
+      "main": [
+        [
+          {
+            "node": "Check scores",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send WhatsApp - Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check scores": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp - HOT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send WhatsApp - WARM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send WhatsApp - COLD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp - Conversation": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp - HOT": {
+      "main": [
+        [
+          {
+            "node": "Update Lead HOT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp - WARM": {
+      "main": [
+        [
+          {
+            "node": "Update Lead WARM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp - COLD": {
+      "main": [
+        [
+          {
+            "node": "Update Lead COLD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "versionId": "2675948e-fa5a-406a-a4e8-7312ab52977c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dca847801624bbc23e924ded2c8457a5cfb7c81045dd00c8ed65c6f261ab848a"
+  },
+  "id": "5K7oHiKKYbQO3xOy",
+  "tags": []
+}

@@ -21,8 +21,6 @@ class WorkflowService {
     console.log('🔍 [DEBUG] leadsTable:', leadsTable);
     console.log('🔍 [DEBUG] biensTable:', biensTable);
 
-    let configNodeFound = false;
-
     return {
       ...workflowJson,
       nodes: workflowJson.nodes.map((node, index) => {
@@ -30,7 +28,6 @@ class WorkflowService {
 
         // 1. Config nodes (n8n-nodes-base.set named "Config")
         if (node.type === 'n8n-nodes-base.set' && node.name === 'Config') {
-          configNodeFound = true;
           console.log('🔍 [DEBUG] Config node trouvé! Avant:', JSON.stringify(node.parameters, null, 2));
 
           // Garder la structure existante mais mettre à jour les valeurs
@@ -98,16 +95,16 @@ class WorkflowService {
         return node;
       })
     };
-
-    console.log('🔍 [DEBUG] Config node trouvé dans le workflow?', configNodeFound);
   }
   /**
-   * Crée automatiquement les 3 workflows pour un tenant
-   * (email-parser, bot-qualification, response-dashboard)
+   * Crée le workflow Email Parser pour un tenant
+   * Note: Bot Qualification et Response Dashboard sont maintenant des workflows
+   * multi-tenant partagés (un seul workflow pour tous les tenants)
    */
   async createAllWorkflows(tenantId, gmailCredentialId) {
     try {
-      console.log(`\n📋 Création automatique des workflows pour: ${tenantId}`);
+      console.log(`\n📋 Création du workflow Email Parser pour: ${tenantId}`);
+      console.log('ℹ️  Bot Qualification et Response Dashboard sont des workflows partagés multi-tenant');
 
       // 1. Vérifier que le tenant a des tokens OAuth
       const { data: tenant, error } = await supabaseService.supabase
@@ -120,9 +117,9 @@ class WorkflowService {
         throw new Error(`Tenant ${tenantId} n'a pas de tokens OAuth`);
       }
 
-      // 2. Vérifier si des workflows existent déjà
+      // 2. Vérifier si le workflow Email Parser existe déjà
       if (tenant.n8n_workflow_id) {
-        console.log(`⚠️  Des workflows existent déjà pour ce tenant`);
+        console.log(`⚠️  Le workflow Email Parser existe déjà pour ce tenant`);
         return {
           emailParser: tenant.n8n_workflow_id,
           created: false
@@ -130,49 +127,23 @@ class WorkflowService {
       }
 
       // 3. Tables partagées dans public - pas besoin de créer de schéma
-      // Les tables public.leads et public.biens utilisent tenant_id pour filtrer
       console.log('\n📊 Utilisation des tables partagées (public.leads, public.biens)');
 
       // 4. Créer ou récupérer le dossier n8n pour ce tenant
       const project = await n8nService.createOrGetProjectFolder(tenant.company_name, tenantId);
       const projectId = project ? project.id : null;
 
-      // 5. Créer les 3 workflows
-      const workflows = {
-        emailParser: null,
-        botQualification: null,
-        responseDashboard: null
-      };
-
-      // 4a. Créer le workflow Email Parser (avec Gmail credential)
+      // 5. Créer uniquement le workflow Email Parser (avec Gmail credential)
+      // Bot Qualification et Response Dashboard sont des workflows partagés
       console.log('\n📧 Création workflow: Email Parser');
-      workflows.emailParser = await this.createEmailParserWorkflow(
+      const emailParserWorkflow = await this.createEmailParserWorkflow(
         tenantId,
         tenant,
         gmailCredentialId,
         projectId
       );
 
-      // 4b. Créer le workflow Bot Qualification
-      console.log('\n🤖 Création workflow: Bot Qualification');
-      workflows.botQualification = await this.createWorkflowFromTemplate(
-        'bot-qualification',
-        tenantId,
-        tenant,
-        projectId
-      );
-
-      // 4c. Créer le workflow Response Dashboard
-      console.log('\n📊 Création workflow: Response Dashboard');
-      workflows.responseDashboard = await this.createWorkflowFromTemplate(
-        'response-dashboard',
-        tenantId,
-        tenant,
-        projectId
-      );
-
-      // 5. Sauvegarder les IDs des workflows dans Supabase
-      // Tables partagées: leads et biens (dans public)
+      // 6. Sauvegarder l'ID du workflow dans Supabase
       const leadsTableName = 'leads';
       const biensTableName = 'biens';
 
@@ -181,9 +152,7 @@ class WorkflowService {
       const { data: updateData, error: updateError } = await supabaseService.supabase
         .from('tenants')
         .update({
-          n8n_workflow_id: workflows.emailParser.id,
-          n8n_workflow_bot_id: workflows.botQualification.id,
-          n8n_workflow_dashboard_id: workflows.responseDashboard.id,
+          n8n_workflow_id: emailParserWorkflow.id,
           n8n_project_id: projectId,
           leads_table_name: leadsTableName,
           biens_table_name: biensTableName
@@ -193,22 +162,20 @@ class WorkflowService {
 
       if (updateError) {
         console.error('❌ Erreur sauvegarde Supabase:', updateError.message);
-        throw new Error(`Impossible de sauvegarder les workflows: ${updateError.message}`);
+        throw new Error(`Impossible de sauvegarder le workflow: ${updateError.message}`);
       }
 
       console.log('🔍 [DEBUG] Données sauvegardées:', JSON.stringify(updateData, null, 2));
-      console.log('\n✅ Tous les workflows créés et sauvegardés dans Supabase');
+      console.log('\n✅ Workflow Email Parser créé et sauvegardé dans Supabase');
 
       return {
-        emailParser: workflows.emailParser.id,
-        botQualification: workflows.botQualification.id,
-        responseDashboard: workflows.responseDashboard.id,
+        emailParser: emailParserWorkflow.id,
         projectId,
         created: true
       };
 
     } catch (error) {
-      console.error(`❌ Erreur création workflows pour ${tenantId}:`, error.message);
+      console.error(`❌ Erreur création workflow pour ${tenantId}:`, error.message);
       throw error;
     }
   }

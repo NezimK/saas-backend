@@ -1,0 +1,323 @@
+{
+  "name": "Response Dashboard - Multi-tenant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "response-dashboard-multitenant",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        -672,
+        96
+      ],
+      "typeVersion": 2.1,
+      "id": "1e7ba241-0e54-45f4-8422-263ab961bf7e",
+      "webhookId": "response-dashboard-multitenant"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "tenants",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "tenant_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.tenant_id }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Tenant",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        -448,
+        96
+      ],
+      "typeVersion": 1,
+      "id": "221f1e22-5564-49c7-b1a8-9a8644e3ecd8",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tenant-exists",
+              "leftValue": "={{ $json.tenant_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tenant Exists?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -224,
+        96
+      ],
+      "typeVersion": 2,
+      "id": "8974dd5a-495e-4ad6-838b-22825df4c799"
+    },
+    {
+      "parameters": {
+        "from": "={{ $('Get Tenant').item.json.whatsapp_number }}",
+        "to": "={{ $('Webhook').item.json.body.phoneNumber }}",
+        "toWhatsapp": true,
+        "message": "={{ $('Webhook').item.json.body.message }}",
+        "options": {}
+      },
+      "name": "Send WhatsApp",
+      "type": "n8n-nodes-base.twilio",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "86159f58-c4c5-4988-9a62-a86f58584daf",
+      "credentials": {
+        "twilioApi": {
+          "id": "UxCNprVyrXSYQCAL",
+          "name": "Twilio account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "limit": 1,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.leadId }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            },
+            {
+              "keyName": "phone",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.phoneNumber }}"
+            }
+          ]
+        }
+      },
+      "name": "Get Lead",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        224,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "8fd2b43d-bdd7-42ea-87d7-c08727e419f1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Récupérer le message de l'agent (Depuis le Webhook)\nconst agentMessage = $('Webhook').item.json.body.message;\n\n// 2. Récupérer l'historique actuel (Depuis le nœud \"Get Lead\")\nconst leadData = $input.first().json;\nlet history = [];\n\ntry {\n  if (leadData.conversation_json) {\n    history = typeof leadData.conversation_json === 'string' \n      ? JSON.parse(leadData.conversation_json) \n      : leadData.conversation_json;\n  }\n} catch (e) {\n  history = [];\n}\n\n// 3. Ajouter le nouveau message de l'agent\nhistory.push({\n  role: \"agent\",\n  text: agentMessage,\n  time: new Date().toISOString()\n});\n\n// 4. Sortie\nreturn {\n  json: {\n    updated_history_json: JSON.stringify(history)\n  }\n};"
+      },
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        448,
+        0
+      ],
+      "typeVersion": 2,
+      "id": "5c2de11a-02d1-4940-9c8d-57dda8e9fc5d"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "thread_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Lead').item.json.thread_id }}"
+            },
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.leadId }}"
+            },
+            {
+              "keyName": "client_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Get Tenant').item.json.tenant_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "conversation_json",
+              "fieldValue": "={{ $json.updated_history_json }}"
+            },
+            {
+              "fieldId": "pause_ai",
+              "fieldValue": "true"
+            }
+          ]
+        }
+      },
+      "name": "Update Lead",
+      "type": "n8n-nodes-base.supabase",
+      "position": [
+        672,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "175fc43c-9cbf-4ef4-bc05-70edf3767af2",
+      "credentials": {
+        "supabaseApi": {
+          "id": "9JDdKkNf1nHtQNdE",
+          "name": "Supabase account Ali"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'Tenant not found', tenant_id: $('Webhook').item.json.body.tenant_id }) }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "name": "Respond Tenant Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        0,
+        192
+      ],
+      "typeVersion": 1.4,
+      "id": "fcfcbafd-3f9b-4a18-a35b-ab97ea75b535"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Tenant": {
+      "main": [
+        [
+          {
+            "node": "Tenant Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tenant Exists?": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Tenant Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Get Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timeSavedMode": "fixed",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": -1,
+    "availableInMCP": true
+  },
+  "versionId": "863551b5-4f0d-4ad1-a7b0-22de46a37cf7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dca847801624bbc23e924ded2c8457a5cfb7c81045dd00c8ed65c6f261ab848a"
+  },
+  "id": "RJBhOOnoJMhJ4wn1",
+  "tags": []
+}
