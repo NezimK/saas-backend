@@ -38,6 +38,7 @@ app.use(cors({
     'http://www.emkai.fr',        // Site marketing HTTP
     'https://emkai.fr',           // Site marketing sans www
     'http://emkai.fr',            // Site marketing sans www HTTP
+    /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Réseau local (test mobile)
     process.env.DASHBOARD_URL,    // URL configurable
     process.env.FRONTEND_URL      // Site marketing configurable
   ].filter(Boolean),

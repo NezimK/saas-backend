@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabaseService = require('../services/supabaseService');
 const authService = require('../services/authService');
+const whatsappPoolService = require('../services/whatsappPoolService');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
 
@@ -295,7 +296,8 @@ router.get('/tenant/:tenantId', async (req, res) => {
         status: tenant.status,
         email_filters: tenant.email_filters || [],
         api_key: tenant.api_key ? '***configured***' : null,
-        api_status: tenant.api_status
+        api_status: tenant.api_status,
+        whatsapp_number: tenant.whatsapp_number || null
       }
     });
 
@@ -338,12 +340,9 @@ router.get('/filters/:tenantId', async (req, res) => {
 });
 
 /**
- * POST /api/onboarding/validate-netty-api
- * Valide la clé API Netty et la sauvegarde
- */
-/**
  * POST /api/onboarding/complete
  * Marque l'onboarding comme termine et retourne l'URL du dashboard
+ * Assigne automatiquement un numéro WhatsApp du pool
  */
 router.post('/complete', async (req, res) => {
   try {
@@ -355,6 +354,7 @@ router.post('/complete', async (req, res) => {
 
     console.log(`Finalisation onboarding pour tenant: ${tenantId}`);
 
+    // Marquer le tenant comme actif
     const { error } = await supabaseService.supabase
       .from('tenants')
       .update({
@@ -368,11 +368,22 @@ router.post('/complete', async (req, res) => {
       return res.status(500).json({ error: 'Erreur lors de la finalisation' });
     }
 
-    console.log(`Onboarding termine pour tenant: ${tenantId}`);
+    // Assigner automatiquement un numéro WhatsApp du pool
+    const whatsappResult = await whatsappPoolService.assignNumberToTenant(tenantId);
+
+    if (!whatsappResult.success) {
+      console.warn(`⚠️ Pas de numéro WhatsApp disponible pour ${tenantId}: ${whatsappResult.error}`);
+    } else {
+      console.log(`📱 WhatsApp assigné: ${whatsappResult.phoneNumber} (déjà assigné: ${whatsappResult.alreadyAssigned})`);
+    }
+
+    console.log(`✅ Onboarding terminé pour tenant: ${tenantId}`);
 
     res.json({
       success: true,
-      dashboardUrl: process.env.DASHBOARD_URL || 'http://localhost:5173'
+      dashboardUrl: process.env.DASHBOARD_URL || 'http://localhost:5173',
+      whatsappNumber: whatsappResult.success ? whatsappResult.phoneNumber : null,
+      whatsappWarning: whatsappResult.success ? null : whatsappResult.error
     });
 
   } catch (error) {
@@ -385,6 +396,84 @@ router.post('/complete', async (req, res) => {
  * POST /api/onboarding/validate-netty-api
  * Valide la clé API Netty et la sauvegarde
  */
+/**
+ * POST /api/onboarding/whatsapp-number
+ * Configure le numéro WhatsApp unique de l'agence
+ */
+router.post('/whatsapp-number', async (req, res) => {
+  try {
+    const { tenantId, whatsappNumber } = req.body;
+
+    if (!tenantId || !whatsappNumber) {
+      return res.status(400).json({ error: 'tenantId et whatsappNumber requis' });
+    }
+
+    // Normaliser le numéro au format E.164
+    let normalizedNumber = whatsappNumber.trim().replace(/\s+/g, '');
+
+    // Si le numéro ne commence pas par +, ajouter +33 pour la France
+    if (!normalizedNumber.startsWith('+')) {
+      if (normalizedNumber.startsWith('0')) {
+        normalizedNumber = '+33' + normalizedNumber.substring(1);
+      } else {
+        normalizedNumber = '+' + normalizedNumber;
+      }
+    }
+
+    // Valider le format E.164
+    const e164Regex = /^\+[1-9]\d{1,14}$/;
+    if (!e164Regex.test(normalizedNumber)) {
+      return res.status(400).json({
+        error: 'Format de numéro invalide. Utilisez le format international (ex: +33612345678)'
+      });
+    }
+
+    console.log(`📱 Configuration WhatsApp pour ${tenantId}: ${normalizedNumber}`);
+
+    // Vérifier que le numéro n'est pas déjà utilisé par un autre tenant
+    const { data: existing, error: checkError } = await supabaseService.supabase
+      .from('tenants')
+      .select('tenant_id, company_name')
+      .eq('whatsapp_number', normalizedNumber)
+      .neq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Erreur vérification unicité:', checkError);
+      return res.status(500).json({ error: 'Erreur lors de la vérification du numéro' });
+    }
+
+    if (existing) {
+      return res.status(409).json({
+        error: `Ce numéro est déjà utilisé par une autre agence (${existing.company_name || 'Inconnue'})`
+      });
+    }
+
+    // Mettre à jour le tenant avec le numéro WhatsApp
+    const { error: updateError } = await supabaseService.supabase
+      .from('tenants')
+      .update({ whatsapp_number: normalizedNumber })
+      .eq('tenant_id', tenantId);
+
+    if (updateError) {
+      console.error('Erreur mise à jour WhatsApp:', updateError);
+      return res.status(500).json({ error: 'Erreur lors de la sauvegarde du numéro' });
+    }
+
+    console.log(`✅ Numéro WhatsApp configuré pour ${tenantId}: ${normalizedNumber}`);
+
+    res.json({
+      success: true,
+      whatsappNumber: normalizedNumber,
+      message: 'Numéro WhatsApp configuré avec succès'
+    });
+
+  } catch (error) {
+    console.error('Erreur whatsapp-number:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/validate-netty-api', async (req, res) => {
   try {
     const { tenantId, apiKey } = req.body;
@@ -472,6 +561,75 @@ router.post('/validate-netty-api', async (req, res) => {
 
   } catch (error) {
     console.error('Erreur validate-netty-api:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/onboarding/whatsapp-pool
+ * Récupère le statut du pool de numéros WhatsApp (admin)
+ */
+router.get('/whatsapp-pool', async (req, res) => {
+  try {
+    const status = await whatsappPoolService.getPoolStatus();
+
+    if (!status.success) {
+      return res.status(500).json({ error: status.error });
+    }
+
+    res.json(status);
+  } catch (error) {
+    console.error('Erreur whatsapp-pool:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/onboarding/whatsapp-pool/add
+ * Ajouter un numéro au pool (admin)
+ */
+router.post('/whatsapp-pool/add', async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'phoneNumber requis' });
+    }
+
+    const result = await whatsappPoolService.addNumberToPool(phoneNumber);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Erreur whatsapp-pool/add:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/onboarding/whatsapp-pool/release
+ * Libérer le numéro d'un tenant (admin)
+ */
+router.post('/whatsapp-pool/release', async (req, res) => {
+  try {
+    const { tenantId } = req.body;
+
+    if (!tenantId) {
+      return res.status(400).json({ error: 'tenantId requis' });
+    }
+
+    const result = await whatsappPoolService.releaseNumber(tenantId);
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Erreur whatsapp-pool/release:', error);
     res.status(500).json({ error: error.message });
   }
 });
