@@ -28,53 +28,78 @@ class WhatsAppPoolService {
         };
       }
 
-      // Trouver un numéro disponible
-      const { data: availableNumber, error: findError } = await supabaseService.supabase
-        .from('whatsapp_numbers_pool')
-        .select('*')
-        .eq('status', 'available')
-        .limit(1)
-        .maybeSingle();
+      // Trouver et assigner un numéro avec retry en cas de race condition
+      const MAX_RETRIES = 3;
+      let assignedNumber = null;
 
-      if (findError) {
-        console.error('Erreur recherche numéro disponible:', findError);
-        return {
-          success: false,
-          error: 'Erreur lors de la recherche d\'un numéro disponible'
-        };
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        // Trouver un numéro disponible (avec ordre deterministe)
+        const { data: availableNumber, error: findError } = await supabaseService.supabase
+          .from('whatsapp_numbers_pool')
+          .select('*')
+          .eq('status', 'available')
+          .order('id', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (findError) {
+          console.error('Erreur recherche numéro disponible:', findError);
+          return {
+            success: false,
+            error: 'Erreur lors de la recherche d\'un numéro disponible'
+          };
+        }
+
+        if (!availableNumber) {
+          console.warn(`⚠️ Aucun numéro WhatsApp disponible pour tenant ${tenantId}`);
+          return {
+            success: false,
+            error: 'Aucun numéro WhatsApp disponible. Contactez le support pour en ajouter.'
+          };
+        }
+
+        // Assigner le numéro au tenant (mise à jour atomique avec verification du count)
+        const { data: updatedRows, error: updatePoolError } = await supabaseService.supabase
+          .from('whatsapp_numbers_pool')
+          .update({
+            tenant_id: tenantId,
+            status: 'assigned',
+            assigned_at: new Date().toISOString()
+          })
+          .eq('id', availableNumber.id)
+          .eq('status', 'available')
+          .select();
+
+        if (updatePoolError) {
+          console.error('Erreur assignation pool:', updatePoolError);
+          return {
+            success: false,
+            error: 'Erreur lors de l\'assignation du numéro'
+          };
+        }
+
+        // Verifier qu'une ligne a bien ete modifiee
+        if (updatedRows && updatedRows.length > 0) {
+          assignedNumber = availableNumber;
+          break; // Succes, sortir de la boucle
+        }
+
+        // Race condition detectee - le numero a ete pris par un autre tenant
+        console.warn(`⚠️ Tentative ${attempt}/${MAX_RETRIES}: Numéro ${availableNumber.phone_number} déjà pris, retry...`);
       }
 
-      if (!availableNumber) {
-        console.warn(`⚠️ Aucun numéro WhatsApp disponible pour tenant ${tenantId}`);
+      if (!assignedNumber) {
+        console.error(`❌ Impossible d'assigner un numéro après ${MAX_RETRIES} tentatives pour tenant ${tenantId}`);
         return {
           success: false,
-          error: 'Aucun numéro WhatsApp disponible. Contactez le support pour en ajouter.'
-        };
-      }
-
-      // Assigner le numéro au tenant (mise à jour atomique)
-      const { error: updatePoolError } = await supabaseService.supabase
-        .from('whatsapp_numbers_pool')
-        .update({
-          tenant_id: tenantId,
-          status: 'assigned',
-          assigned_at: new Date().toISOString()
-        })
-        .eq('id', availableNumber.id)
-        .eq('status', 'available'); // Double vérification pour éviter les race conditions
-
-      if (updatePoolError) {
-        console.error('Erreur assignation pool:', updatePoolError);
-        return {
-          success: false,
-          error: 'Erreur lors de l\'assignation du numéro'
+          error: 'Impossible d\'assigner un numéro WhatsApp. Veuillez réessayer.'
         };
       }
 
       // Mettre à jour le tenant avec son numéro WhatsApp
       const { error: updateTenantError } = await supabaseService.supabase
         .from('tenants')
-        .update({ whatsapp_number: availableNumber.phone_number })
+        .update({ whatsapp_number: assignedNumber.phone_number })
         .eq('tenant_id', tenantId);
 
       if (updateTenantError) {
@@ -82,11 +107,11 @@ class WhatsAppPoolService {
         // Ne pas bloquer, le numéro est assigné dans le pool
       }
 
-      console.log(`✅ Numéro ${availableNumber.phone_number} assigné au tenant ${tenantId}`);
+      console.log(`✅ Numéro ${assignedNumber.phone_number} assigné au tenant ${tenantId}`);
 
       return {
         success: true,
-        phoneNumber: availableNumber.phone_number,
+        phoneNumber: assignedNumber.phone_number,
         alreadyAssigned: false
       };
 

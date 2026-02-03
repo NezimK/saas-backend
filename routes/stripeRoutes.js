@@ -77,6 +77,18 @@ router.post('/create-checkout-session', async (req, res) => {
       return res.status(400).json({ error: 'Type de compte invalide' });
     }
 
+    // Vérifier si un utilisateur existe déjà avec cet email
+    const { data: existingUsers } = await supabaseService.supabase
+      .from('users')
+      .select('id, email')
+      .eq('email', email.toLowerCase());
+
+    if (existingUsers && existingUsers.length > 0) {
+      return res.status(400).json({
+        error: 'Un compte existe déjà avec cet email. Veuillez vous connecter ou utiliser un autre email.'
+      });
+    }
+
     // Récupérer le price ID pour le plan choisi
     const priceId = PRICE_IDS[plan];
     console.log(`📋 Plan demandé: ${plan}, Price ID: ${priceId}`);
@@ -377,6 +389,123 @@ router.post('/create-portal-session', async (req, res) => {
   } catch (error) {
     console.error('❌ Erreur création portal session:', error);
     res.status(500).json({ error: 'Erreur lors de la création de la session' });
+  }
+});
+
+/**
+ * POST /api/stripe/resend-magic-link
+ * Change l'email et renvoie le magic link après un paiement
+ */
+router.post('/resend-magic-link', async (req, res) => {
+  try {
+    const { sessionId, newEmail } = req.body;
+
+    if (!sessionId || !newEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'Session ID et nouvel email requis'
+      });
+    }
+
+    // Valider le format de l'email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Format d\'email invalide'
+      });
+    }
+
+    // Récupérer la session Stripe
+    if (!stripe) {
+      return res.status(500).json({
+        success: false,
+        error: 'Stripe non configuré'
+      });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (!session || session.payment_status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'Session de paiement invalide ou non payée'
+      });
+    }
+
+    const oldEmail = session.customer_email;
+
+    // Chercher l'utilisateur avec l'ancien email
+    const { data: user, error: userError } = await supabaseService.supabase
+      .from('users')
+      .select('*')
+      .eq('email', oldEmail)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Vérifier que le nouvel email n'est pas déjà utilisé
+    const { data: existingUsers } = await supabaseService.supabase
+      .from('users')
+      .select('id')
+      .eq('email', newEmail);
+
+    if (existingUsers && existingUsers.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cet email est déjà utilisé par un autre compte'
+      });
+    }
+
+    // Mettre à jour l'email de l'utilisateur
+    const { error: updateError } = await supabaseService.supabase
+      .from('users')
+      .update({ email: newEmail })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('❌ Erreur mise à jour email:', updateError);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de la mise à jour de l\'email'
+      });
+    }
+
+    // Générer un nouveau magic link
+    const magicLink = await magicLinkService.generateMagicLink(user.id);
+
+    // Envoyer l'email au nouvel email
+    const emailResult = await emailService.sendMagicLinkEmail(
+      newEmail,
+      magicLink,
+      session.metadata?.companyName || 'votre agence'
+    );
+
+    if (!emailResult.success) {
+      console.error('❌ Erreur envoi email:', emailResult.error);
+      return res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'envoi de l\'email'
+      });
+    }
+
+    console.log(`📧 Magic link renvoyé de ${oldEmail} vers ${newEmail}`);
+
+    res.json({
+      success: true,
+      message: 'Un email de connexion a été envoyé à votre nouvelle adresse'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur resend-magic-link:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors du renvoi de l\'email'
+    });
   }
 });
 

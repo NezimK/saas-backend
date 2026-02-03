@@ -12,6 +12,7 @@ const leadsRoutes = require('./routes/leadsRoutes');
 const usersRoutes = require('./routes/usersRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
 const calendarRoutes = require('./routes/calendarRoutes');
+const aiSynonymsRoutes = require('./routes/aiSynonymsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,6 +69,7 @@ app.use('/api/token', tokenRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api', calendarRoutes);      // Calendar OAuth (Google, Outlook)
+app.use('/api/ai', aiSynonymsRoutes); // Gestion synonymes IA
 
 // Health check
 app.get('/health', (req, res) => {
