@@ -51,7 +51,6 @@ Thumbs.db
 .windsurf/
 .zencoder/
 skills/
-
 # Migrations SQL (contiennent des données sensibles ou temporaires)
 migrations/
 
@@ -59,7 +58,8 @@ migrations/
 workflows/
 final_workflows/
 new_workflows/
+UniqueWorkflow/
 
 champ.txt
 
-.vscode/
+CLAUDE.md
