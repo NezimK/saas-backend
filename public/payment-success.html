@@ -198,6 +198,89 @@
             text-decoration: underline;
         }
 
+        .edit-email-btn {
+            background: transparent;
+            border: 1px solid var(--gray-600);
+            color: var(--gray-400);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .edit-email-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .edit-email-form {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--gray-700);
+        }
+
+        .edit-email-form.show {
+            display: block;
+        }
+
+        .edit-email-form input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--gray-700);
+            border-radius: 8px;
+            background: var(--dark-card);
+            color: white;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .edit-email-form input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .edit-email-form .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .edit-email-form button {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .edit-email-form .btn-primary {
+            background: var(--accent);
+            color: black;
+            border: none;
+        }
+
+        .edit-email-form .btn-primary:hover {
+            background: var(--accent-dark);
+        }
+
+        .edit-email-form .btn-secondary {
+            background: transparent;
+            color: var(--gray-400);
+            border: 1px solid var(--gray-600);
+        }
+
+        .edit-email-form .btn-secondary:hover {
+            border-color: var(--gray-500);
+            color: var(--gray-300);
+        }
+
         .footer {
             margin-top: 30px;
             color: var(--gray-500);
@@ -244,6 +327,20 @@
                 Un email contenant votre <strong>lien de connexion</strong> vient d'etre envoye a l'adresse
                 <span class="email-address" id="customerEmail">votre email</span>.
             </p>
+            <button class="edit-email-btn" onclick="toggleEditEmail()">
+                <span>&#9998;</span>
+                Modifier l'email
+            </button>
+            <div class="edit-email-form" id="editEmailForm">
+                <input type="email" id="newEmailInput" placeholder="Nouvelle adresse email">
+                <p style="font-size: 12px; color: var(--gray-500); margin-bottom: 12px;">
+                    Un nouveau lien de connexion sera envoye a cette adresse.
+                </p>
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="requestEmailChange()">Envoyer</button>
+                    <button class="btn-secondary" onclick="toggleEditEmail()">Annuler</button>
+                </div>
+            </div>
         </div>
 
         <div class="steps">
@@ -275,6 +372,7 @@
         // Recuperer les infos de la session Stripe si disponibles
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session_id');
+        let currentEmail = '';
 
         if (sessionId) {
             // Recuperer l'email du client depuis la session Stripe
@@ -282,12 +380,80 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.email) {
+                        currentEmail = data.email;
                         document.getElementById('customerEmail').textContent = data.email;
                     }
                 })
                 .catch(err => {
                     console.log('Could not fetch session details');
                 });
+        }
+
+        function toggleEditEmail() {
+            const form = document.getElementById('editEmailForm');
+            form.classList.toggle('show');
+            if (form.classList.contains('show')) {
+                document.getElementById('newEmailInput').focus();
+            }
+        }
+
+        async function requestEmailChange() {
+            const newEmail = document.getElementById('newEmailInput').value.trim();
+            if (!newEmail) {
+                alert('Veuillez entrer une adresse email');
+                return;
+            }
+
+            // Valider le format de l'email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(newEmail)) {
+                alert('Veuillez entrer une adresse email valide');
+                return;
+            }
+
+            if (!sessionId) {
+                alert('Session de paiement non trouvee. Veuillez contacter le support.');
+                return;
+            }
+
+            // Desactiver le bouton pendant l'envoi
+            const btn = document.querySelector('.edit-email-form .btn-primary');
+            const originalText = btn.textContent;
+            btn.textContent = 'Envoi en cours...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/stripe/resend-magic-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        newEmail: newEmail
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Mettre a jour l'affichage de l'email
+                    document.getElementById('customerEmail').textContent = newEmail;
+                    currentEmail = newEmail;
+
+                    // Fermer le formulaire et afficher un message de succes
+                    toggleEditEmail();
+                    alert('Un email de connexion a ete envoye a ' + newEmail);
+                } else {
+                    alert(data.error || 'Erreur lors de l\'envoi. Veuillez reessayer.');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de connexion. Veuillez reessayer.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
     </script>
 </body>
