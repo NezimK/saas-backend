@@ -1,4 +1,5 @@
 const supabaseService = require('./supabaseService');
+const logger = require('./logger');
 
 /**
  * Service de gestion du pool de numéros WhatsApp Twilio
@@ -20,7 +21,7 @@ class WhatsAppPoolService {
         .maybeSingle();
 
       if (existingAssignment) {
-        console.log(`📱 Tenant ${tenantId} a déjà le numéro ${existingAssignment.phone_number}`);
+        logger.info('whatsapp-pool', `Tenant ${tenantId} a deja le numero ${existingAssignment.phone_number}`);
         return {
           success: true,
           phoneNumber: existingAssignment.phone_number,
@@ -43,7 +44,7 @@ class WhatsAppPoolService {
           .maybeSingle();
 
         if (findError) {
-          console.error('Erreur recherche numéro disponible:', findError);
+          logger.error('whatsapp-pool', 'Erreur recherche numero disponible', findError.message);
           return {
             success: false,
             error: 'Erreur lors de la recherche d\'un numéro disponible'
@@ -51,7 +52,7 @@ class WhatsAppPoolService {
         }
 
         if (!availableNumber) {
-          console.warn(`⚠️ Aucun numéro WhatsApp disponible pour tenant ${tenantId}`);
+          logger.warn('whatsapp-pool', `Aucun numero WhatsApp disponible pour tenant ${tenantId}`);
           return {
             success: false,
             error: 'Aucun numéro WhatsApp disponible. Contactez le support pour en ajouter.'
@@ -71,7 +72,7 @@ class WhatsAppPoolService {
           .select();
 
         if (updatePoolError) {
-          console.error('Erreur assignation pool:', updatePoolError);
+          logger.error('whatsapp-pool', 'Erreur assignation pool', updatePoolError.message);
           return {
             success: false,
             error: 'Erreur lors de l\'assignation du numéro'
@@ -85,11 +86,11 @@ class WhatsAppPoolService {
         }
 
         // Race condition detectee - le numero a ete pris par un autre tenant
-        console.warn(`⚠️ Tentative ${attempt}/${MAX_RETRIES}: Numéro ${availableNumber.phone_number} déjà pris, retry...`);
+        logger.warn('whatsapp-pool', `Tentative ${attempt}/${MAX_RETRIES}: Numero ${availableNumber.phone_number} deja pris, retry...`);
       }
 
       if (!assignedNumber) {
-        console.error(`❌ Impossible d'assigner un numéro après ${MAX_RETRIES} tentatives pour tenant ${tenantId}`);
+        logger.error('whatsapp-pool', `Impossible d'assigner un numero apres ${MAX_RETRIES} tentatives pour tenant ${tenantId}`);
         return {
           success: false,
           error: 'Impossible d\'assigner un numéro WhatsApp. Veuillez réessayer.'
@@ -103,11 +104,11 @@ class WhatsAppPoolService {
         .eq('tenant_id', tenantId);
 
       if (updateTenantError) {
-        console.error('Erreur mise à jour tenant:', updateTenantError);
+        logger.error('whatsapp-pool', 'Erreur mise a jour tenant', updateTenantError.message);
         // Ne pas bloquer, le numéro est assigné dans le pool
       }
 
-      console.log(`✅ Numéro ${assignedNumber.phone_number} assigné au tenant ${tenantId}`);
+      logger.info('whatsapp-pool', `Numero ${assignedNumber.phone_number} assigne au tenant ${tenantId}`);
 
       return {
         success: true,
@@ -116,7 +117,7 @@ class WhatsAppPoolService {
       };
 
     } catch (error) {
-      console.error('Erreur assignNumberToTenant:', error);
+      logger.error('whatsapp-pool', 'Erreur assignNumberToTenant', error.message);
       return {
         success: false,
         error: error.message
@@ -141,7 +142,7 @@ class WhatsAppPoolService {
         .eq('tenant_id', tenantId);
 
       if (error) {
-        console.error('Erreur libération numéro:', error);
+        logger.error('whatsapp-pool', 'Erreur liberation numero', error.message);
         return { success: false, error: error.message };
       }
 
@@ -151,11 +152,11 @@ class WhatsAppPoolService {
         .update({ whatsapp_number: null })
         .eq('tenant_id', tenantId);
 
-      console.log(`🔓 Numéro libéré pour tenant ${tenantId}`);
+      logger.info('whatsapp-pool', `Numero libere pour tenant ${tenantId}`);
       return { success: true };
 
     } catch (error) {
-      console.error('Erreur releaseNumber:', error);
+      logger.error('whatsapp-pool', 'Erreur releaseNumber', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -179,7 +180,7 @@ class WhatsAppPoolService {
         .order('id', { ascending: true });
 
       if (error) {
-        console.error('Erreur getPoolStatus:', error);
+        logger.error('whatsapp-pool', 'Erreur getPoolStatus', error.message);
         return { success: false, error: error.message };
       }
 
@@ -221,7 +222,7 @@ class WhatsAppPoolService {
       };
 
     } catch (error) {
-      console.error('Erreur getPoolStatus:', error);
+      logger.error('whatsapp-pool', 'Erreur getPoolStatus', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -266,11 +267,11 @@ class WhatsAppPoolService {
         return { success: false, error: error.message };
       }
 
-      console.log(`➕ Numéro ${normalized} ajouté au pool`);
+      logger.info('whatsapp-pool', `Numero ${normalized} ajoute au pool`);
       return { success: true, phoneNumber: normalized };
 
     } catch (error) {
-      console.error('Erreur addNumberToPool:', error);
+      logger.error('whatsapp-pool', 'Erreur addNumberToPool', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -291,7 +292,7 @@ class WhatsAppPoolService {
         return { success: false, error: error.message };
       }
 
-      console.log(`⏸️ Numéro ${phoneNumber} suspendu`);
+      logger.info('whatsapp-pool', `Numero ${phoneNumber} suspendu`);
       return { success: true };
 
     } catch (error) {
@@ -324,7 +325,7 @@ class WhatsAppPoolService {
         return { success: false, error: error.message };
       }
 
-      console.log(`▶️ Numéro ${phoneNumber} réactivé (${newStatus})`);
+      logger.info('whatsapp-pool', `Numero ${phoneNumber} reactive (${newStatus})`);
       return { success: true, status: newStatus };
 
     } catch (error) {

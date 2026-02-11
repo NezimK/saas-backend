@@ -1,5 +1,6 @@
 const axios = require('axios');
 require('dotenv').config();
+const logger = require('./logger');
 
 const n8nAPI = axios.create({
     baseURL: process.env.N8N_API_URL,
@@ -18,19 +19,15 @@ async function createCredential(type, name, data) {
             data
         };
 
-        console.log(`🔑 Création credential: ${name} (${type})`);
+        logger.info('n8n', `Creation credential: ${name} (${type})`);
 
         const { data: result } = await n8nAPI.post('/credentials', payload);
 
-        console.log(`✅ Credential créé: ${result.id}`);
+        logger.info('n8n', `Credential cree: ${result.id}`);
 
         return result;
     } catch (error) {
-        console.error('❌ Erreur création credential:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status
-        });
+        logger.error('n8n', 'Erreur creation credential', { message: error.message, response: error.response?.data, status: error.response?.status });
         throw new Error(`Erreur création credential: ${error.response?.data?.message || error.message}`);
     }
 }
@@ -38,12 +35,12 @@ async function createCredential(type, name, data) {
 // Créer un workflow depuis un template
 async function createWorkflow(workflowTemplate, tenantId, projectId = null) {
     try {
-        console.log('🔍 [DEBUG n8nService.createWorkflow] Début');
-        console.log('🔍 [DEBUG] workflowTemplate.name reçu:', workflowTemplate.name);
+        logger.debug('n8n', 'createWorkflow - Debut');
+        logger.debug('n8n', 'workflowTemplate.name recu:', workflowTemplate.name);
 
         // Clone le template
         const workflow = JSON.parse(JSON.stringify(workflowTemplate));
-        console.log('🔍 [DEBUG] workflow.name après clone:', workflow.name);
+        logger.debug('n8n', 'workflow.name apres clone:', workflow.name);
 
         // Liste des propriétés autorisées pour la création d'un workflow
         const allowedWorkflowProps = ['name', 'nodes', 'connections', 'settings'];
@@ -57,7 +54,7 @@ async function createWorkflow(workflowTemplate, tenantId, projectId = null) {
             }
         });
 
-        console.log('🔍 [DEBUG] cleanWorkflow.name après nettoyage:', cleanWorkflow.name);
+        logger.debug('n8n', 'cleanWorkflow.name apres nettoyage:', cleanWorkflow.name);
 
         // Nettoie les nodes : garde uniquement les propriétés autorisées
         if (cleanWorkflow.nodes) {
@@ -102,30 +99,26 @@ async function createWorkflow(workflowTemplate, tenantId, projectId = null) {
         // Ajouter le projectId si fourni
         if (projectId) {
             cleanWorkflow.projectId = projectId;
-            console.log(`📁 Workflow sera créé dans le dossier: ${projectId}`);
+            logger.info('n8n', `Workflow sera cree dans le dossier: ${projectId}`);
         }
 
-        console.log('🔍 [DEBUG] cleanWorkflow.name FINAL avant envoi à n8n:', cleanWorkflow.name);
-        console.log('📤 Envoi à n8n:', JSON.stringify(cleanWorkflow, null, 2).substring(0, 500) + '...');
+        logger.debug('n8n', 'cleanWorkflow.name FINAL avant envoi a n8n:', cleanWorkflow.name);
+        logger.debug('n8n', 'Envoi a n8n:', JSON.stringify(cleanWorkflow, null, 2).substring(0, 500) + '...');
 
         // Crée le workflow dans n8n
         const { data } = await n8nAPI.post('/workflows', cleanWorkflow);
 
-        console.log('✅ Workflow créé avec succès ! ID:', data.id);
+        logger.info('n8n', `Workflow cree avec succes ! ID: ${data.id}`);
 
         // Active le workflow
-        console.log('🔄 Activation du workflow...');
+        logger.info('n8n', 'Activation du workflow...');
         await n8nAPI.post(`/workflows/${data.id}/activate`);
 
-        console.log('✅ Workflow activé !');
+        logger.info('n8n', 'Workflow active !');
 
         return data;
     } catch (error) {
-        console.error('❌ Erreur n8n détaillée:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status
-        });
+        logger.error('n8n', 'Erreur n8n detaillee', { message: error.message, response: error.response?.data, status: error.response?.status });
         throw new Error(error.response?.data?.message || error.message);
     }
 }
@@ -133,7 +126,7 @@ async function createWorkflow(workflowTemplate, tenantId, projectId = null) {
 // Créer ou récupérer un dossier (project) pour un tenant
 async function createOrGetProjectFolder(companyName, tenantId) {
     try {
-        console.log(`📁 Création/Récupération du dossier n8n pour: ${companyName}`);
+        logger.info('n8n', `Creation/Recuperation du dossier n8n pour: ${companyName}`);
 
         // Nom du dossier
         const folderName = companyName || `Client-${tenantId.substring(0, 8)}`;
@@ -143,7 +136,7 @@ async function createOrGetProjectFolder(companyName, tenantId) {
         const existingProject = projects.find(p => p.name === folderName);
 
         if (existingProject) {
-            console.log(`✅ Dossier existant trouvé: ${existingProject.name} (ID: ${existingProject.id})`);
+            logger.info('n8n', `Dossier existant trouve: ${existingProject.name} (ID: ${existingProject.id})`);
             return existingProject;
         }
 
@@ -153,19 +146,15 @@ async function createOrGetProjectFolder(companyName, tenantId) {
             type: 'team' // ou 'personal' selon la version n8n
         });
 
-        console.log(`✅ Nouveau dossier créé: ${newProject.name} (ID: ${newProject.id})`);
+        logger.info('n8n', `Nouveau dossier cree: ${newProject.name} (ID: ${newProject.id})`);
         return newProject;
 
     } catch (error) {
-        console.error('❌ Erreur création/récupération dossier:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status
-        });
+        logger.error('n8n', 'Erreur creation/recuperation dossier', { message: error.message, response: error.response?.data, status: error.response?.status });
 
         // Si l'API projects n'existe pas (404) ou nécessite une licence (403), retourner null
         if (error.response?.status === 404 || error.response?.status === 403) {
-            console.log('⚠️  API projects non disponible (nécessite licence Enterprise) - workflows créés sans dossier');
+            logger.warn('n8n', 'API projects non disponible (necessite licence Enterprise) - workflows crees sans dossier');
             return null;
         }
 

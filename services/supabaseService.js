@@ -3,10 +3,16 @@ const { createClient } = require('@supabase/supabase-js');
 
 class SupabaseService {
   constructor() {
+    // Le backend est un serveur de confiance : utiliser la service role key
+    // pour bypasser les RLS policies (les contrôles d'accès sont faits côté API)
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
     this.supabase = createClient(
       process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
+      key
     );
+
+    // Alias pour rétro-compatibilité
+    this.adminSupabase = this.supabase;
   }
 
   async getWorkflowTemplate(templateName) {
@@ -29,7 +35,8 @@ class SupabaseService {
   }
 
   async createTenant(tenantData) {
-    const { data, error} = await this.supabase
+    const client = this.adminSupabase || this.supabase;
+    const { data, error} = await client
       .from('tenants')
       .insert([tenantData])
       .select()
@@ -43,17 +50,17 @@ class SupabaseService {
    * Exécute du SQL brut via Supabase (pour créer schémas, etc.)
    */
   async executeRawSQL(sql) {
-    console.log('🔍 [DEBUG executeRawSQL] Appel RPC exec_sql...');
-    console.log('🔍 [DEBUG] SQL length:', sql.length, 'chars');
+    const logger = require('./logger');
+    logger.debug('supabase', `executeRawSQL: ${sql.length} chars`);
 
     const { data, error } = await this.supabase.rpc('exec_sql', { sql_query: sql });
 
     if (error) {
-      console.error('❌ [DEBUG executeRawSQL] Erreur RPC:', JSON.stringify(error, null, 2));
+      logger.error('supabase', 'executeRawSQL erreur RPC', error);
       throw new Error(`Erreur SQL: ${error.message}`);
     }
 
-    console.log('🔍 [DEBUG executeRawSQL] Résultat:', data);
+    logger.debug('supabase', 'executeRawSQL résultat OK');
     return data;
   }
 }

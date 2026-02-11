@@ -1,7 +1,10 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
+const logger = require('./services/logger');
 const onboardingRoutes = require('./routes/onboardingRoutes');
 const authRoutes = require('./routes/authRoutes');
 const gmailRoutes = require('./routes/gmailRoutes');
@@ -15,6 +18,7 @@ const calendarRoutes = require('./routes/calendarRoutes');
 const aiSynonymsRoutes = require('./routes/aiSynonymsRoutes');
 
 const app = express();
+app.set('trust proxy', 1); // Nécessaire derrière ngrok/reverse proxy
 const PORT = process.env.PORT || 3000;
 
 // Test de connexion n8n au démarrage
@@ -22,8 +26,8 @@ const axios = require('axios');
 axios.get(`${process.env.N8N_API_URL}/workflows`, {
   headers: { 'X-N8N-API-KEY': process.env.N8N_API_KEY }
 })
-.then(() => console.log('✅ Connexion n8n OK'))
-.catch(err => console.error('❌ Erreur connexion n8n:', err.response?.data || err.message));
+.then(() => logger.info('server', 'Connexion n8n OK'))
+.catch(err => logger.error('server', 'Erreur connexion n8n', err.response?.data || err.message));
 
 // Middleware
 app.use(cors({
@@ -58,6 +62,33 @@ app.use((req, res, next) => {
 
 app.use(express.static('public')); // Servir les fichiers statiques (onboarding.html)
 
+// Sécurité: headers HTTP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'", "https://*.supabase.co"],
+    }
+  }
+}));
+
+// Rate limiting
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: { error: 'Trop de tentatives, réessayez dans 15 minutes' } });
+const onboardingLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, message: { error: 'Trop de requêtes, réessayez dans 15 minutes' } });
+const chatLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { error: 'Trop de requêtes chat, réessayez dans 1 minute' } });
+const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, message: { error: 'Trop de requêtes, réessayez dans 1 minute' } });
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/refresh', authLimiter);
+app.use('/api/onboarding', onboardingLimiter);
+app.use('/api/chat', chatLimiter);
+app.use('/api', generalLimiter);
+
 // Routes
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/auth', authRoutes);
@@ -78,9 +109,5 @@ app.get('/health', (req, res) => {
 
 // Démarrage du serveur
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
-  console.log(`📡 Endpoint onboarding: http://localhost:${PORT}/api/onboarding/create-tenant`);
-  console.log(`📧 OAuth Gmail: http://localhost:${PORT}/auth/gmail/connect?tenantId=XXX`);
-  console.log(`📅 OAuth Google Calendar: http://localhost:${PORT}/api/auth/google/callback`);
-  console.log(`📅 OAuth Outlook Calendar: http://localhost:${PORT}/api/auth/outlook/callback`);
+  logger.info('server', `Serveur demarre sur http://localhost:${PORT}`);
 });

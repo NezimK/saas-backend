@@ -9,6 +9,7 @@ const { authMiddleware, requireRole } = require('../middlewares/authMiddleware')
 const authService = require('../services/authService');
 const supabaseService = require('../services/supabaseService');
 const { sendInvitationEmail } = require('../services/emailService');
+const logger = require('../services/logger');
 
 // Toutes les routes nécessitent une authentification
 router.use(authMiddleware);
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
   try {
     let query = supabaseService.supabase
       .from('users')
-      .select('id, email, first_name, last_name, role, is_active, last_login, created_at')
+      .select('id, email, first_name, last_name, role, is_active, requires_password_setup, last_login, created_at')
       .eq('tenant_id', req.user.tenantId)
       .order('created_at', { ascending: false });
 
@@ -35,7 +36,7 @@ router.get('/', async (req, res) => {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Erreur récupération utilisateurs:', error);
+      logger.error('users', 'Erreur récupération utilisateurs', error.message);
       return res.status(500).json({ success: false, error: error.message });
     }
 
@@ -55,7 +56,7 @@ router.get('/', async (req, res) => {
 
     res.json({ success: true, users });
   } catch (error) {
-    console.error('Erreur GET /api/users:', error);
+    logger.error('users', 'Erreur GET /api/users', error.message);
     res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });
@@ -87,7 +88,7 @@ router.get('/agents', async (req, res) => {
 
     res.json({ success: true, agents });
   } catch (error) {
-    console.error('Erreur GET /api/users/agents:', error);
+    logger.error('users', 'Erreur GET /api/users/agents', error.message);
     res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });
@@ -126,6 +127,37 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
       return res.status(409).json({ success: false, error: 'Un utilisateur avec cet email existe déjà' });
     }
 
+    // Récupérer les infos du tenant (limite utilisateurs + nom entreprise)
+    const { data: tenant, error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .select('company_name, max_users, plan')
+      .eq('tenant_id', req.user.tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
+    }
+
+    // Vérifier la limite max_users (-1 = illimité pour Premium)
+    if (tenant.max_users !== -1) {
+      const { count: activeUsersCount } = await supabaseService.supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('tenant_id', req.user.tenantId)
+        .eq('is_active', true);
+
+      if (activeUsersCount >= tenant.max_users) {
+        return res.status(403).json({
+          success: false,
+          error: 'Limite d\'utilisateurs atteinte pour votre plan',
+          code: 'MAX_USERS_REACHED',
+          usersCount: activeUsersCount,
+          usersLimit: tenant.max_users,
+          plan: tenant.plan
+        });
+      }
+    }
+
     // Créer l'utilisateur sans mot de passe (invitation flow)
     const user = await authService.createUserWithoutPassword(req.user.tenantId, {
       email,
@@ -133,13 +165,6 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
       lastName,
       role: userRole
     });
-
-    // Récupérer les infos du tenant pour l'email
-    const { data: tenant } = await supabaseService.supabase
-      .from('tenants')
-      .select('company_name')
-      .eq('tenant_id', req.user.tenantId)
-      .single();
 
     // Générer le token d'invitation (valide 24h)
     const inviteToken = authService.generateSetupToken(user.id);
@@ -158,7 +183,7 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
     );
 
     if (!emailResult.success) {
-      console.warn('Email d\'invitation non envoyé:', emailResult.error);
+      logger.warn('users', 'Email d\'invitation non envoyé', emailResult.error);
     }
 
     res.status(201).json({
@@ -178,7 +203,7 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
         : 'Utilisateur créé mais email non envoyé'
     });
   } catch (error) {
-    console.error('Erreur POST /api/users:', error);
+    logger.error('users', 'Erreur POST /api/users', error.message);
     res.status(500).json({ success: false, error: error.message || 'Erreur serveur' });
   }
 });
@@ -230,7 +255,36 @@ router.put('/:id', async (req, res) => {
         }
         updates.role = role;
       }
-      if (isActive !== undefined) updates.is_active = isActive;
+      if (isActive !== undefined) {
+        // Vérifier la limite max_users lors de la réactivation
+        if (isActive === true && !targetUser.is_active) {
+          const { data: tenant } = await supabaseService.supabase
+            .from('tenants')
+            .select('max_users, plan')
+            .eq('tenant_id', req.user.tenantId)
+            .single();
+
+          if (tenant && tenant.max_users !== -1) {
+            const { count: activeUsersCount } = await supabaseService.supabase
+              .from('users')
+              .select('*', { count: 'exact', head: true })
+              .eq('tenant_id', req.user.tenantId)
+              .eq('is_active', true);
+
+            if (activeUsersCount >= tenant.max_users) {
+              return res.status(403).json({
+                success: false,
+                error: 'Limite d\'utilisateurs atteinte pour votre plan',
+                code: 'MAX_USERS_REACHED',
+                usersCount: activeUsersCount,
+                usersLimit: tenant.max_users,
+                plan: tenant.plan
+              });
+            }
+          }
+        }
+        updates.is_active = isActive;
+      }
     }
 
     if (Object.keys(updates).length === 0) {
@@ -248,7 +302,7 @@ router.put('/:id', async (req, res) => {
       .single();
 
     if (error) {
-      console.error('Erreur mise à jour utilisateur:', error);
+      logger.error('users', 'Erreur mise à jour utilisateur', error.message);
       return res.status(500).json({ success: false, error: error.message });
     }
 
@@ -266,7 +320,7 @@ router.put('/:id', async (req, res) => {
       message: 'Utilisateur mis à jour'
     });
   } catch (error) {
-    console.error('Erreur PUT /api/users/:id:', error);
+    logger.error('users', 'Erreur PUT /api/users/:id', error.message);
     res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });
@@ -317,7 +371,91 @@ router.delete('/:id', requireRole('manager', 'admin'), async (req, res) => {
 
     res.json({ success: true, message: 'Utilisateur désactivé' });
   } catch (error) {
-    console.error('Erreur DELETE /api/users/:id:', error);
+    logger.error('users', 'Erreur DELETE /api/users/:id', error.message);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * POST /api/users/me/update-email
+ * Met à jour l'email de l'utilisateur connecté avec vérification du mot de passe
+ */
+router.post('/me/update-email', async (req, res) => {
+  try {
+    const { newEmail, password } = req.body;
+
+    if (!newEmail || !password) {
+      return res.status(400).json({ success: false, error: 'Email et mot de passe requis' });
+    }
+
+    // Récupérer l'utilisateur actuel avec son hash de mot de passe
+    const { data: currentUser, error: findError } = await supabaseService.supabase
+      .from('users')
+      .select('*')
+      .eq('id', req.user.userId)
+      .single();
+
+    if (findError || !currentUser) {
+      return res.status(404).json({ success: false, error: 'Utilisateur non trouvé' });
+    }
+
+    // Vérifier le mot de passe
+    const isPasswordValid = await authService.verifyPassword(password, currentUser.password_hash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, error: 'Mot de passe incorrect' });
+    }
+
+    // Vérifier que le nouvel email n'est pas déjà utilisé
+    const emailLower = newEmail.toLowerCase();
+    const { data: existingUser } = await supabaseService.supabase
+      .from('users')
+      .select('id')
+      .eq('email', emailLower)
+      .neq('id', req.user.userId)
+      .single();
+
+    if (existingUser) {
+      return res.status(409).json({ success: false, error: 'Cet email est déjà utilisé' });
+    }
+
+    // Mettre à jour l'email dans la table users
+    const { data, error } = await supabaseService.supabase
+      .from('users')
+      .update({ email: emailLower, updated_at: new Date().toISOString() })
+      .eq('id', req.user.userId)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('users', 'Erreur update email', error.message);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // Mettre à jour l'email dans la table tenants si c'est l'admin/owner du tenant
+    const { error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .update({ email: emailLower, updated_at: new Date().toISOString() })
+      .eq('tenant_id', req.user.tenantId)
+      .eq('email', currentUser.email); // Seulement si l'ancien email correspond
+
+    if (tenantError) {
+      logger.warn('users', 'Erreur mise à jour email tenant (peut être normal si pas owner)', tenantError.message);
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: data.id,
+        email: data.email,
+        name: `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+        firstName: data.first_name,
+        lastName: data.last_name,
+        role: data.role
+      },
+      message: 'Email mis à jour avec succès'
+    });
+  } catch (error) {
+    logger.error('users', 'Erreur POST /api/users/me/update-email', error.message);
     res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });
@@ -357,7 +495,7 @@ router.post('/:id/reset-password', requireRole('manager', 'admin'), async (req, 
       message: `Mot de passe réinitialisé pour ${targetUser.email}`
     });
   } catch (error) {
-    console.error('Erreur POST /api/users/:id/reset-password:', error);
+    logger.error('users', 'Erreur POST /api/users/:id/reset-password', error.message);
     res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });

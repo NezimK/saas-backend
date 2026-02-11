@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const supabaseService = require('../services/supabaseService');
+const { authMiddleware } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
 
 // URL du webhook n8n (configurable via env)
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://n8n.emkai.fr';
@@ -8,8 +11,13 @@ const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://n8n.emkai.fr';
  * POST /api/sync/netty/:tenantId
  * Déclenche une synchronisation manuelle des biens Netty pour un tenant
  */
-router.post('/netty/:tenantId', async (req, res) => {
+router.post('/netty/:tenantId', authMiddleware, async (req, res) => {
   const { tenantId } = req.params;
+
+  // Vérifier que le tenant correspond au JWT
+  if (req.user.tenantId !== tenantId) {
+    return res.status(403).json({ success: false, error: 'Accès non autorisé à ce tenant' });
+  }
 
   if (!tenantId) {
     return res.status(400).json({
@@ -19,7 +27,7 @@ router.post('/netty/:tenantId', async (req, res) => {
   }
 
   try {
-    console.log(`🔄 Sync Netty demandée pour tenant: ${tenantId}`);
+    logger.info('sync', `Sync Netty demandee pour tenant: ${tenantId}`);
 
     // Appel du webhook n8n
     const response = await fetch(`${N8N_WEBHOOK_URL}/webhook/sync-netty-single`, {
@@ -33,7 +41,7 @@ router.post('/netty/:tenantId', async (req, res) => {
     const result = await response.json();
 
     if (!response.ok) {
-      console.error(`❌ Erreur sync Netty:`, result);
+      logger.error('sync', 'Erreur sync Netty', result);
       return res.status(response.status).json({
         success: false,
         error: result.error || 'Erreur lors de la synchronisation',
@@ -41,7 +49,7 @@ router.post('/netty/:tenantId', async (req, res) => {
       });
     }
 
-    console.log(`✅ Sync Netty terminée:`, result);
+    logger.info('sync', 'Sync Netty terminee', result);
 
     return res.json({
       success: true,
@@ -51,7 +59,7 @@ router.post('/netty/:tenantId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(`❌ Erreur sync Netty:`, error.message);
+    logger.error('sync', 'Erreur sync Netty', error.message);
     return res.status(500).json({
       success: false,
       error: 'Erreur serveur lors de la synchronisation',
@@ -64,17 +72,16 @@ router.post('/netty/:tenantId', async (req, res) => {
  * GET /api/sync/status/:tenantId
  * Récupère le statut de la dernière synchronisation
  */
-router.get('/status/:tenantId', async (req, res) => {
+router.get('/status/:tenantId', authMiddleware, async (req, res) => {
   const { tenantId } = req.params;
 
-  try {
-    const { createClient } = require('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_KEY
-    );
+  // Vérifier que le tenant correspond au JWT
+  if (req.user.tenantId !== tenantId) {
+    return res.status(403).json({ success: false, error: 'Accès non autorisé à ce tenant' });
+  }
 
-    const { data, error } = await supabase
+  try {
+    const { data, error } = await supabaseService.supabase
       .from('tenants')
       .select('api_last_sync, api_status, company_name')
       .eq('tenant_id', tenantId)
@@ -88,7 +95,7 @@ router.get('/status/:tenantId', async (req, res) => {
     }
 
     // Compter les biens du tenant
-    const { count } = await supabase
+    const { count } = await supabaseService.supabase
       .from('biens')
       .select('*', { count: 'exact', head: true })
       .eq('client_id', tenantId);
@@ -105,7 +112,7 @@ router.get('/status/:tenantId', async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Erreur serveur'
     });
   }
 });

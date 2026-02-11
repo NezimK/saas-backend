@@ -10,6 +10,7 @@ const supabaseService = require('../services/supabaseService');
 const magicLinkService = require('../services/magicLinkService');
 const emailService = require('../services/emailService');
 const { authMiddleware } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
 
 /**
  * POST /api/auth/login
@@ -39,23 +40,13 @@ router.post('/login', async (req, res) => {
 
     res.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        agency: user.tenant_id, // Compatibilité avec le dashboard existant
-        agencyName: user.tenants?.company_name || 'Mon Agence'
-      },
+      user: authService.formatUserResponse(user),
       accessToken,
       refreshToken,
       expiresIn: 900 // 15 minutes en secondes
     });
   } catch (error) {
-    console.error('Erreur login:', error);
+    logger.error('auth', 'Erreur login', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -94,7 +85,7 @@ router.post('/refresh', async (req, res) => {
       expiresIn: 900
     });
   } catch (error) {
-    console.error('Erreur refresh:', error);
+    logger.error('auth', 'Erreur refresh', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -119,7 +110,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
       message: 'Déconnexion réussie'
     });
   } catch (error) {
-    console.error('Erreur logout:', error);
+    logger.error('auth', 'Erreur logout', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -145,19 +136,12 @@ router.get('/me', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        agency: user.tenant_id,
-        agencyName: user.tenants?.company_name || 'Mon Agence'
+        ...authService.formatUserResponse(user),
+        notification_settings: user.notification_settings || null
       }
     });
   } catch (error) {
-    console.error('Erreur /me:', error);
+    logger.error('auth', 'Erreur /me', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -210,7 +194,7 @@ router.post('/change-password', authMiddleware, async (req, res) => {
       message: 'Mot de passe mis à jour. Veuillez vous reconnecter.'
     });
   } catch (error) {
-    console.error('Erreur change-password:', error);
+    logger.error('auth', 'Erreur change-password', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -254,7 +238,7 @@ router.post('/verify-magic-link', async (req, res) => {
       setupToken
     });
   } catch (error) {
-    console.error('Erreur verify-magic-link:', error);
+    logger.error('auth', 'Erreur verify-magic-link', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -314,26 +298,21 @@ router.post('/set-password', async (req, res) => {
     // Générer les tokens d'authentification
     const { accessToken, refreshToken } = await authService.generateTokens(user);
 
+    // Générer le token d'onboarding pour protéger les endpoints post-paiement
+    const onboardingToken = authService.generateOnboardingToken(user.tenant_id);
+
     res.json({
       success: true,
       message: 'Mot de passe défini avec succès',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        agencyName: user.tenants?.company_name || 'Mon Agence'
-      },
+      user: authService.formatUserResponse(user),
       accessToken,
       refreshToken,
+      onboardingToken,
       expiresIn: 900,
       redirectUrl: `/onboarding.html?tenantId=${user.tenant_id}`
     });
   } catch (error) {
-    console.error('Erreur set-password:', error);
+    logger.error('auth', 'Erreur set-password', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -365,7 +344,7 @@ router.post('/forgot-password', async (req, res) => {
 
     // Toujours retourner success pour éviter l'énumération d'utilisateurs
     if (userError || !user) {
-      console.log(`Forgot password: email ${email} non trouvé`);
+      logger.info('auth', `Forgot password: email not found`);
       return res.json({
         success: true,
         message: 'Si cet email existe, un lien de réinitialisation a été envoyé'
@@ -385,21 +364,21 @@ router.post('/forgot-password', async (req, res) => {
     );
 
     if (!emailResult.success) {
-      console.error('Erreur envoi email reset:', emailResult.error);
+      logger.error('auth', 'Erreur envoi email reset', emailResult.error);
       return res.status(500).json({
         success: false,
         error: 'Erreur lors de l\'envoi de l\'email'
       });
     }
 
-    console.log(`Email reset password envoyé à ${email}`);
+    logger.info('auth', 'Email reset password envoyé');
     res.json({
       success: true,
       message: 'Si cet email existe, un lien de réinitialisation a été envoyé'
     });
 
   } catch (error) {
-    console.error('Erreur forgot-password:', error);
+    logger.error('auth', 'Erreur forgot-password', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -449,27 +428,18 @@ router.post('/reset-password', async (req, res) => {
     const accessToken = authService.generateAccessToken(user);
     const refreshToken = await authService.generateRefreshToken(user.id);
 
-    console.log(`Mot de passe réinitialisé pour ${user.email}`);
+    logger.info('auth', `Mot de passe réinitialisé pour ${user.email}`);
     res.json({
       success: true,
       message: 'Mot de passe mis à jour avec succès',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        agencyName: user.tenants?.company_name || 'Mon Agence'
-      },
+      user: authService.formatUserResponse(user),
       accessToken,
       refreshToken,
       expiresIn: 900
     });
 
   } catch (error) {
-    console.error('Erreur reset-password:', error);
+    logger.error('auth', 'Erreur reset-password', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'

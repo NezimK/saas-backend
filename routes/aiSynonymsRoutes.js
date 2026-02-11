@@ -1,14 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabaseService = require('../services/supabaseService');
+const { authMiddleware } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
+const supabase = supabaseService.adminSupabase || supabaseService.supabase;
 
 // GET /api/ai/unclear-responses - Liste les réponses floues non résolues
-router.get('/unclear-responses', async (req, res) => {
+router.get('/unclear-responses', authMiddleware, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('ai_unclear_responses')
@@ -22,13 +20,13 @@ router.get('/unclear-responses', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    console.error('Error fetching unclear responses:', error);
+    logger.error('ai-synonyms', 'Error fetching unclear responses', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 // POST /api/ai/promote-to-synonym - Promouvoir une unclear_response en synonyme
-router.post('/promote-to-synonym', async (req, res) => {
+router.post('/promote-to-synonym', authMiddleware, async (req, res) => {
   try {
     const { unclear_response_id, category, value, confidence = 1.0 } = req.body;
 
@@ -86,13 +84,13 @@ router.post('/promote-to-synonym', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error promoting to synonym:', error);
+    logger.error('ai-synonyms', 'Error promoting to synonym', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 // POST /api/ai/dismiss-unclear - Rejeter une unclear_response (faux positif)
-router.post('/dismiss-unclear', async (req, res) => {
+router.post('/dismiss-unclear', authMiddleware, async (req, res) => {
   try {
     const { unclear_response_id } = req.body;
 
@@ -114,13 +112,13 @@ router.post('/dismiss-unclear', async (req, res) => {
     res.json({ success: true, message: 'Réponse rejetée' });
 
   } catch (error) {
-    console.error('Error dismissing unclear response:', error);
+    logger.error('ai-synonyms', 'Error dismissing unclear response', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 // GET /api/ai/synonyms - Liste tous les synonymes actifs
-router.get('/synonyms', async (req, res) => {
+router.get('/synonyms', authMiddleware, async (req, res) => {
   try {
     const { category } = req.query;
 
@@ -139,13 +137,13 @@ router.get('/synonyms', async (req, res) => {
     if (error) throw error;
     res.json(data);
   } catch (error) {
-    console.error('Error fetching synonyms:', error);
+    logger.error('ai-synonyms', 'Error fetching synonyms', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
 // DELETE /api/ai/synonyms/:id - Désactiver un synonyme
-router.delete('/synonyms/:id', async (req, res) => {
+router.delete('/synonyms/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -158,7 +156,7 @@ router.delete('/synonyms/:id', async (req, res) => {
 
     res.json({ success: true, message: 'Synonyme désactivé' });
   } catch (error) {
-    console.error('Error deleting synonym:', error);
+    logger.error('ai-synonyms', 'Error deleting synonym', error.message);
     res.status(500).json({ error: error.message });
   }
 });

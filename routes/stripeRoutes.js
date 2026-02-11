@@ -4,6 +4,8 @@ const supabaseService = require('../services/supabaseService');
 const authService = require('../services/authService');
 const magicLinkService = require('../services/magicLinkService');
 const emailService = require('../services/emailService');
+const { authMiddleware, requireRole } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
 
 // Stripe will be initialized when the module loads
 let stripe;
@@ -12,7 +14,7 @@ try {
     stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
   }
 } catch (error) {
-  console.warn('⚠️ Stripe SDK not installed or STRIPE_SECRET_KEY not set');
+  logger.warn('stripe', 'Stripe SDK not installed or STRIPE_SECRET_KEY not set');
 }
 
 // Mapping plans → Stripe price IDs (à configurer dans .env après création dans Stripe Dashboard)
@@ -22,15 +24,7 @@ const PRICE_IDS = {
   premium: process.env.STRIPE_PRICE_PREMIUM
 };
 
-// Plan details for validation
-const VALID_PLANS = ['essentiel', 'avance', 'premium'];
-
-// Limites par plan
-const PLAN_LIMITS = {
-  essentiel: { monthly_conversation_limit: 600, max_users: 3 },
-  avance: { monthly_conversation_limit: 1500, max_users: 6 },
-  premium: { monthly_conversation_limit: 3000, max_users: -1 } // -1 = illimité
-};
+const { VALID_PLANS, PLAN_LIMITS } = require('../config/constants');
 
 /**
  * POST /api/stripe/create-checkout-session
@@ -91,11 +85,10 @@ router.post('/create-checkout-session', async (req, res) => {
 
     // Récupérer le price ID pour le plan choisi
     const priceId = PRICE_IDS[plan];
-    console.log(`📋 Plan demandé: ${plan}, Price ID: ${priceId}`);
-    console.log('📋 PRICE_IDS disponibles:', PRICE_IDS);
+    logger.info('stripe', `Plan requested: ${plan}, Price ID: ${priceId}`, PRICE_IDS);
 
     if (!priceId) {
-      console.error(`Price ID non configuré pour le plan: ${plan}`);
+      logger.error('stripe', `Price ID non configure pour le plan: ${plan}`);
       return res.status(500).json({
         error: 'Configuration du plan manquante. Veuillez contacter le support.'
       });
@@ -128,10 +121,18 @@ router.post('/create-checkout-session', async (req, res) => {
       // Options supplémentaires pour une meilleure UX
       billing_address_collection: 'required',
       allow_promotion_codes: true,
-      locale: 'fr'
+      locale: 'fr',
+      // Configuration de l'abonnement avec envoi automatique des factures
+      subscription_data: {
+        description: `Abonnement Emkai - Plan ${plan.charAt(0).toUpperCase() + plan.slice(1)}`,
+        metadata: {
+          plan: plan,
+          companyName: companyName
+        }
+      }
     });
 
-    console.log(`✅ Stripe Checkout session créée: ${session.id} pour ${email} (plan: ${plan})`);
+    logger.info('stripe', `Checkout session created: ${session.id} for ${email} (plan: ${plan})`);
 
     res.json({
       url: session.url,
@@ -139,7 +140,7 @@ router.post('/create-checkout-session', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur création session Stripe:', error);
+    logger.error('stripe', 'Erreur creation session Stripe', error.message);
 
     // Erreurs Stripe spécifiques
     if (error.type === 'StripeInvalidRequestError') {
@@ -162,7 +163,7 @@ router.post('/create-checkout-session', async (req, res) => {
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     if (!stripe) {
-      console.error('Stripe non configuré pour le webhook');
+      logger.error('stripe', 'Stripe non configure pour le webhook');
       return res.status(500).send('Webhook Error: Stripe not configured');
     }
 
@@ -170,7 +171,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
-      console.error('STRIPE_WEBHOOK_SECRET non configuré');
+      logger.error('stripe', 'STRIPE_WEBHOOK_SECRET non configure');
       return res.status(500).send('Webhook Error: Secret not configured');
     }
 
@@ -179,7 +180,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
-      console.error('❌ Signature webhook invalide:', err.message);
+      logger.error('stripe', 'Signature webhook invalide', err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
@@ -187,11 +188,25 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        console.log('✅ Paiement réussi:', session.id);
-        console.log('   Customer:', session.customer_email);
-        console.log('   Metadata:', session.metadata);
+        logger.info('stripe', `Paiement réussi : ${session.id}`, { customer: session.customer_email, metadata: session.metadata });
 
         try {
+          // Mettre à jour le customer Stripe pour activer l'envoi des factures par email
+          if (session.customer) {
+            await stripe.customers.update(session.customer, {
+              name: session.metadata.companyName,
+              metadata: {
+                companyName: session.metadata.companyName,
+                accountType: session.metadata.accountType,
+                plan: session.metadata.plan
+              },
+              invoice_settings: {
+                custom_fields: null,
+                footer: 'Merci pour votre confiance ! - Emkai'
+              }
+            });
+            logger.info('stripe', 'Customer Stripe mis à jour avec les paramètres de facturation');
+          }
           // 1. Vérifier si un tenant existe déjà avec cet email
           const { data: existingTenant } = await supabaseService.supabase
             .from('tenants')
@@ -225,7 +240,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
             if (updateError) throw updateError;
             tenant = updatedTenant;
-            console.log('📝 Tenant existant mis à jour:', tenant.tenant_id);
+            logger.info('stripe', `Tenant existant mis à jour : ${tenant.tenant_id}`);
           } else {
             // Créer un nouveau tenant
             tenant = await supabaseService.createTenant({
@@ -240,7 +255,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               stripe_subscription_id: session.subscription,
               status: 'pending_onboarding'
             });
-            console.log('🆕 Nouveau tenant créé:', tenant.tenant_id);
+            logger.info('stripe', `Nouveau tenant créé : ${tenant.tenant_id}`);
           }
 
           // 2. Vérifier si un utilisateur existe déjà
@@ -254,7 +269,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
           if (existingUser) {
             user = existingUser;
-            console.log('👤 Utilisateur existant:', user.id);
+            logger.info('stripe', `Utilisateur existant: ${user.id}`);
           } else {
             // Créer l'utilisateur manager SANS mot de passe
             user = await authService.createUserWithoutPassword(tenant.tenant_id, {
@@ -262,28 +277,30 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               companyName: session.metadata.companyName,
               role: 'manager'
             });
-            console.log('👤 Nouvel utilisateur créé:', user.id);
+            logger.info('stripe', `Nouvel utilisateur créé : ${user.id}`);
           }
 
-          // 3. Générer le magic link
+          // 3. Générer le magic link + onboarding token
           const magicLink = await magicLinkService.generateMagicLink(user.id);
-          console.log('🔗 Magic link généré pour', session.customer_email);
+          const onboardingToken = authService.generateOnboardingToken(tenant.tenant_id);
+          const magicLinkWithOnboarding = `${magicLink}&onboardingToken=${onboardingToken}`;
+          logger.info('stripe', `Magic link + onboarding token generes pour ${session.customer_email}`);
 
           // 4. Envoyer l'email
           const emailResult = await emailService.sendMagicLinkEmail(
             session.customer_email,
-            magicLink,
+            magicLinkWithOnboarding,
             session.metadata.companyName
           );
 
           if (emailResult.success) {
-            console.log('📧 Email magic link envoyé avec succès');
+            logger.info('stripe', 'Email magic link envoye avec succes');
           } else {
-            console.error('❌ Erreur envoi email:', emailResult.error);
+            logger.error('stripe', 'Erreur envoi email', emailResult.error);
           }
 
         } catch (err) {
-          console.error('❌ Erreur traitement checkout.session.completed:', err);
+          logger.error('stripe', 'Erreur traitement checkout.session.completed', err.message);
           // Ne pas faire échouer le webhook même si le traitement échoue
         }
 
@@ -292,33 +309,138 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
-        console.log('📝 Abonnement mis à jour:', subscription.id);
-        // TODO: Mettre à jour le plan du tenant
+        logger.info('stripe', `Abonnement mis à jour : ${subscription.id}`, { status: subscription.status, customer: subscription.customer });
+
+        try {
+          // Récupérer le tenant par stripe_subscription_id
+          const { data: tenant, error: findError } = await supabaseService.supabase
+            .from('tenants')
+            .select('*')
+            .eq('stripe_subscription_id', subscription.id)
+            .single();
+
+          if (findError || !tenant) {
+            logger.warn('stripe', `Tenant non trouvé pour subscription : ${subscription.id}`);
+            break;
+          }
+
+          // Récupérer le plan et les sièges extra depuis les items de la subscription
+          let newPlan = tenant.plan; // Garder l'ancien plan par défaut
+          let extraSeats = 0;
+          const extraSeatPriceId = process.env.STRIPE_PRICE_EXTRA_SEAT;
+
+          for (const item of (subscription.items?.data || [])) {
+            const itemPriceId = item.price?.id;
+            if (itemPriceId === process.env.STRIPE_PRICE_ESSENTIEL) newPlan = 'essentiel';
+            else if (itemPriceId === process.env.STRIPE_PRICE_AVANCE) newPlan = 'avance';
+            else if (itemPriceId === process.env.STRIPE_PRICE_PREMIUM) newPlan = 'premium';
+            else if (extraSeatPriceId && itemPriceId === extraSeatPriceId) extraSeats = item.quantity || 0;
+          }
+
+          const planLimits = PLAN_LIMITS[newPlan] || PLAN_LIMITS.essentiel;
+          const maxUsers = planLimits.max_users === -1 ? -1 : planLimits.max_users + extraSeats;
+
+          // Mettre à jour le tenant
+          const { error: updateError } = await supabaseService.supabase
+            .from('tenants')
+            .update({
+              plan: newPlan,
+              monthly_conversation_limit: planLimits.monthly_conversation_limit,
+              max_users: maxUsers,
+              subscription_status: subscription.status,
+              updated_at: new Date().toISOString()
+            })
+            .eq('tenant_id', tenant.tenant_id);
+
+          if (updateError) {
+            logger.error('stripe', 'Erreur mise a jour tenant', updateError.message);
+          } else {
+            logger.info('stripe', `Tenant ${tenant.tenant_id} mis à jour : plan=${newPlan}, status=${subscription.status}`);
+          }
+        } catch (err) {
+          logger.error('stripe', 'Erreur traitement subscription.updated', err.message);
+        }
         break;
       }
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
-        console.log('🚫 Abonnement annulé:', subscription.id);
-        // TODO: Désactiver le tenant ou mettre en pause
+        logger.info('stripe', `Abonnement annulé : ${subscription.id}`);
+
+        try {
+          // Récupérer le tenant par stripe_subscription_id
+          const { data: tenant, error: findError } = await supabaseService.supabase
+            .from('tenants')
+            .select('*')
+            .eq('stripe_subscription_id', subscription.id)
+            .single();
+
+          if (findError || !tenant) {
+            logger.warn('stripe', `Tenant non trouvé pour subscription : ${subscription.id}`);
+            break;
+          }
+
+          // Mettre le tenant en plan "free" (désactivé)
+          const { error: updateError } = await supabaseService.supabase
+            .from('tenants')
+            .update({
+              plan: 'free',
+              monthly_conversation_limit: 0,
+              max_users: 1,
+              subscription_status: 'canceled',
+              updated_at: new Date().toISOString()
+            })
+            .eq('tenant_id', tenant.tenant_id);
+
+          if (updateError) {
+            logger.error('stripe', 'Erreur mise a jour tenant', updateError.message);
+          } else {
+            logger.info('stripe', `Tenant ${tenant.tenant_id} passé en plan free (abonnement annulé)`);
+          }
+        } catch (err) {
+          logger.error('stripe', 'Erreur traitement subscription.deleted', err.message);
+        }
         break;
       }
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object;
-        console.log('❌ Paiement échoué:', invoice.id);
-        // TODO: Notifier le client, suspendre le compte après X échecs
+        logger.warn('stripe', `Paiement échoué : ${invoice.id}`, { customer: invoice.customer });
+
+        try {
+          // Récupérer le tenant par stripe_customer_id
+          const { data: tenant } = await supabaseService.supabase
+            .from('tenants')
+            .select('*')
+            .eq('stripe_customer_id', invoice.customer)
+            .single();
+
+          if (tenant) {
+            // Mettre à jour le statut
+            await supabaseService.supabase
+              .from('tenants')
+              .update({
+                subscription_status: 'past_due',
+                updated_at: new Date().toISOString()
+              })
+              .eq('tenant_id', tenant.tenant_id);
+
+            logger.warn('stripe', `Tenant ${tenant.tenant_id} marque comme past_due`);
+          }
+        } catch (err) {
+          logger.error('stripe', 'Erreur traitement invoice.payment_failed', err.message);
+        }
         break;
       }
 
       default:
-        console.log(`⚠️ Événement Stripe non géré: ${event.type}`);
+        logger.warn('stripe', `Evenement Stripe non gere: ${event.type}`);
     }
 
     res.json({ received: true });
 
   } catch (error) {
-    console.error('❌ Erreur webhook Stripe:', error);
+    logger.error('stripe', 'Erreur webhook Stripe', error.message);
     res.status(500).send('Webhook Error');
   }
 });
@@ -341,19 +463,23 @@ router.get('/session/:sessionId', async (req, res) => {
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
-    // Ne retourner que les infos nécessaires pour l'onboarding
+    // Vérifier que la session est récente (< 24h)
+    const sessionAge = Date.now() / 1000 - session.created;
+    if (sessionAge > 86400) {
+      return res.status(400).json({ error: 'Session expirée' });
+    }
+
+    // Ne retourner que les infos nécessaires pour l'onboarding (pas de IDs Stripe)
     res.json({
       email: session.customer_email,
       companyName: session.metadata?.companyName,
       accountType: session.metadata?.accountType,
       plan: session.metadata?.plan,
-      paymentStatus: session.payment_status,
-      customerId: session.customer,
-      subscriptionId: session.subscription
+      paymentStatus: session.payment_status
     });
 
   } catch (error) {
-    console.error('❌ Erreur récupération session Stripe:', error);
+    logger.error('stripe', 'Erreur recuperation session Stripe', error.message);
 
     if (error.type === 'StripeInvalidRequestError') {
       return res.status(404).json({ error: 'Session non trouvée' });
@@ -364,31 +490,344 @@ router.get('/session/:sessionId', async (req, res) => {
 });
 
 /**
- * POST /api/stripe/create-portal-session
- * Crée une session Customer Portal pour gérer l'abonnement
+ * GET /api/stripe/subscription
+ * Récupère les informations d'abonnement du tenant connecté
  */
-router.post('/create-portal-session', async (req, res) => {
+router.get('/subscription', authMiddleware, requireRole('manager', 'admin'), async (req, res) => {
   try {
-    if (!stripe) {
-      return res.status(500).json({ error: 'Stripe non configuré' });
+    const tenantId = req.user.tenantId;
+    logger.info('stripe', `Recuperation subscription pour tenantId: ${tenantId}`);
+
+    // Récupérer les infos du tenant (sélection de toutes les colonnes pour éviter les erreurs si certaines n'existent pas)
+    const { data: tenant, error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (tenantError) {
+      logger.error('stripe', 'Erreur Supabase recuperation tenant', tenantError.message);
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
     }
 
-    const { customerId, returnUrl } = req.body;
+    if (!tenant) {
+      logger.error('stripe', `Tenant non trouvé pour tenantId : ${tenantId}`);
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
+    }
 
-    if (!customerId) {
-      return res.status(400).json({ error: 'Customer ID requis' });
+    logger.info('stripe', `Tenant trouve: ${tenant.company_name} - Plan: ${tenant.plan}`);
+
+    // Compter le nombre d'utilisateurs actifs
+    const { count: userCount } = await supabaseService.supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true);
+
+    // Récupérer les détails de l'abonnement Stripe si disponible
+    let stripeSubscription = null;
+    if (stripe && tenant.stripe_subscription_id) {
+      try {
+        stripeSubscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id);
+      } catch (stripeError) {
+        logger.warn('stripe', 'Impossible de recuperer l\'abonnement Stripe', stripeError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      subscription: {
+        plan: tenant.plan || 'free',
+        status: tenant.subscription_status || stripeSubscription?.status || 'active',
+        conversationsLimit: tenant.monthly_conversation_limit || 0,
+        conversationsUsed: tenant.current_month_usage || 0,
+        usersLimit: tenant.max_users || 1,
+        usersCount: userCount || 1,
+        currentPeriodEnd: stripeSubscription?.current_period_end
+          ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+          : null,
+        cancelAtPeriodEnd: stripeSubscription?.cancel_at_period_end || false,
+        hasStripeCustomer: !!tenant.stripe_customer_id
+      }
+    });
+
+  } catch (error) {
+    logger.error('stripe', 'Erreur GET /api/stripe/subscription', error.message);
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * POST /api/stripe/create-upgrade-session
+ * Crée une session Stripe Checkout pour changer de plan (upgrade ou downgrade)
+ * Utilise le Subscription Update mode de Stripe Checkout
+ */
+router.post('/create-upgrade-session', authMiddleware, requireRole('manager', 'admin'), async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: 'Stripe non configuré' });
+    }
+
+    const { newPlan } = req.body;
+    const tenantId = req.user.tenantId;
+
+    // Valider le plan demandé
+    if (!VALID_PLANS.includes(newPlan)) {
+      return res.status(400).json({ success: false, error: 'Plan invalide' });
+    }
+
+    // Récupérer le tenant avec ses infos Stripe
+    const { data: tenant, error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .select('stripe_customer_id, stripe_subscription_id, plan, email')
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
+    }
+
+    if (!tenant.stripe_subscription_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Aucun abonnement actif. Veuillez d\'abord souscrire à un plan.'
+      });
+    }
+
+    // Vérifier que le plan est différent
+    if (tenant.plan === newPlan) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vous êtes déjà sur ce plan'
+      });
+    }
+
+    // Récupérer le price ID du nouveau plan
+    const newPriceId = PRICE_IDS[newPlan];
+    if (!newPriceId) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration du plan manquante'
+      });
+    }
+
+    // Récupérer l'abonnement actuel pour obtenir l'item ID du plan (pas du siège extra)
+    const subscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id);
+    const extraSeatPriceId = process.env.STRIPE_PRICE_EXTRA_SEAT;
+
+    // Trouver l'item du plan principal (pas le siège supplémentaire)
+    const planItem = subscription.items.data.find(
+      item => !extraSeatPriceId || item.price.id !== extraSeatPriceId
+    );
+    const subscriptionItemId = planItem ? planItem.id : subscription.items.data[0].id;
+
+    // Compter les sièges extra existants
+    let extraSeats = 0;
+    if (extraSeatPriceId) {
+      const extraSeatItem = subscription.items.data.find(item => item.price.id === extraSeatPriceId);
+      if (extraSeatItem) extraSeats = extraSeatItem.quantity || 0;
+    }
+
+    // Mettre à jour l'abonnement avec le nouveau prix
+    // Stripe gère automatiquement le prorata
+    const updatedSubscription = await stripe.subscriptions.update(tenant.stripe_subscription_id, {
+      items: [{
+        id: subscriptionItemId,
+        price: newPriceId
+      }],
+      proration_behavior: 'create_prorations', // Calcul automatique du prorata
+      metadata: {
+        previous_plan: tenant.plan,
+        new_plan: newPlan,
+        changed_at: new Date().toISOString()
+      }
+    });
+
+    // Mettre à jour le tenant dans la base de données (préserver les sièges extra)
+    const planLimits = PLAN_LIMITS[newPlan];
+    const maxUsers = planLimits.max_users === -1 ? -1 : planLimits.max_users + extraSeats;
+    await supabaseService.supabase
+      .from('tenants')
+      .update({
+        plan: newPlan,
+        monthly_conversation_limit: planLimits.monthly_conversation_limit,
+        max_users: maxUsers,
+        updated_at: new Date().toISOString()
+      })
+      .eq('tenant_id', tenantId);
+
+    logger.info('stripe', `Plan change pour tenant ${tenantId}: ${tenant.plan} -> ${newPlan}`);
+
+    res.json({
+      success: true,
+      message: `Plan changé avec succès vers ${newPlan}`,
+      subscription: {
+        plan: newPlan,
+        status: updatedSubscription.status
+      }
+    });
+
+  } catch (error) {
+    logger.error('stripe', 'Erreur changement de plan', error.message);
+
+    if (error.type === 'StripeInvalidRequestError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Erreur lors du changement de plan. Veuillez réessayer.'
+      });
+    }
+
+    res.status(500).json({ success: false, error: 'Erreur lors du changement de plan' });
+  }
+});
+
+/**
+ * POST /api/stripe/create-portal-session
+ * Crée une session Customer Portal pour gérer l'abonnement
+ * Protégé par authentification - utilise le tenant de l'utilisateur connecté
+ */
+router.post('/create-portal-session', authMiddleware, requireRole('manager', 'admin'), async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: 'Stripe non configuré' });
+    }
+
+    const tenantId = req.user.tenantId;
+
+    // Récupérer le stripe_customer_id du tenant
+    const { data: tenant, error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .select('stripe_customer_id')
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
+    }
+
+    if (!tenant.stripe_customer_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Aucun abonnement Stripe associé à ce compte'
+      });
     }
 
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: returnUrl || `${process.env.DASHBOARD_URL || 'http://localhost:5173'}/settings`
+      customer: tenant.stripe_customer_id,
+      return_url: `${process.env.DASHBOARD_URL || 'http://localhost:5173'}/settings`
     });
 
-    res.json({ url: portalSession.url });
+    res.json({ success: true, url: portalSession.url });
 
   } catch (error) {
-    console.error('❌ Erreur création portal session:', error);
-    res.status(500).json({ error: 'Erreur lors de la création de la session' });
+    logger.error('stripe', 'Erreur creation portal session', error.message);
+    res.status(500).json({ success: false, error: 'Erreur lors de la création de la session' });
+  }
+});
+
+/**
+ * POST /api/stripe/add-extra-seat
+ * Ajoute un siège supplémentaire (15 EUR/mois) à l'abonnement existant
+ * Incrémente max_users de 1 dans la table tenants
+ */
+router.post('/add-extra-seat', authMiddleware, requireRole('manager', 'admin'), async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: 'Stripe non configuré' });
+    }
+
+    const tenantId = req.user.tenantId;
+
+    // Récupérer le tenant
+    const { data: tenant, error: tenantError } = await supabaseService.supabase
+      .from('tenants')
+      .select('stripe_customer_id, stripe_subscription_id, plan, max_users')
+      .eq('tenant_id', tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      return res.status(404).json({ success: false, error: 'Tenant non trouvé' });
+    }
+
+    if (!tenant.stripe_subscription_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Aucun abonnement actif. Veuillez d\'abord souscrire à un plan.'
+      });
+    }
+
+    // Premium a déjà des utilisateurs illimités
+    if (tenant.max_users === -1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Votre plan Premium inclut déjà des utilisateurs illimités'
+      });
+    }
+
+    const extraSeatPriceId = process.env.STRIPE_PRICE_EXTRA_SEAT;
+    if (!extraSeatPriceId) {
+      return res.status(500).json({
+        success: false,
+        error: 'Configuration du prix siège supplémentaire manquante'
+      });
+    }
+
+    // Récupérer la subscription Stripe existante
+    const subscription = await stripe.subscriptions.retrieve(tenant.stripe_subscription_id);
+
+    // Chercher si un item siège supplémentaire existe déjà
+    const existingExtraSeatItem = subscription.items.data.find(
+      item => item.price.id === extraSeatPriceId
+    );
+
+    if (existingExtraSeatItem) {
+      // Incrémenter la quantité
+      await stripe.subscriptionItems.update(existingExtraSeatItem.id, {
+        quantity: existingExtraSeatItem.quantity + 1
+      });
+    } else {
+      // Ajouter un nouvel item
+      await stripe.subscriptionItems.create({
+        subscription: tenant.stripe_subscription_id,
+        price: extraSeatPriceId,
+        quantity: 1
+      });
+    }
+
+    // Incrémenter max_users dans la table tenants
+    const newMaxUsers = tenant.max_users + 1;
+    const { error: updateError } = await supabaseService.supabase
+      .from('tenants')
+      .update({
+        max_users: newMaxUsers,
+        updated_at: new Date().toISOString()
+      })
+      .eq('tenant_id', tenantId);
+
+    if (updateError) {
+      logger.error('stripe', 'Erreur mise a jour max_users', updateError.message);
+      return res.status(500).json({ success: false, error: 'Erreur lors de la mise à jour' });
+    }
+
+    logger.info('stripe', `Siege supplementaire ajoute pour tenant ${tenantId}: max_users ${tenant.max_users} -> ${newMaxUsers}`);
+
+    res.json({
+      success: true,
+      message: 'Siège supplémentaire ajouté avec succès',
+      newMaxUsers
+    });
+
+  } catch (error) {
+    logger.error('stripe', 'Erreur add-extra-seat', error.message);
+
+    if (error.type === 'StripeInvalidRequestError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Erreur Stripe. Veuillez réessayer.'
+      });
+    }
+
+    res.status(500).json({ success: false, error: 'Erreur lors de l\'ajout du siège supplémentaire' });
   }
 });
 
@@ -398,6 +837,10 @@ router.post('/create-portal-session', async (req, res) => {
  */
 router.post('/resend-magic-link', async (req, res) => {
   try {
+    if (!stripe) {
+      return res.status(500).json({ success: false, error: 'Stripe non configuré' });
+    }
+
     const { sessionId, newEmail } = req.body;
 
     if (!sessionId || !newEmail) {
@@ -416,15 +859,31 @@ router.post('/resend-magic-link', async (req, res) => {
       });
     }
 
-    // Récupérer la session Stripe
-    if (!stripe) {
-      return res.status(500).json({
+    // Vérifier que la session est récente (< 24h) pour limiter l'abus
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const sessionAge = Date.now() / 1000 - session.created;
+    if (sessionAge > 86400) {
+      return res.status(400).json({
         success: false,
-        error: 'Stripe non configuré'
+        error: 'Session expirée. Veuillez refaire le processus de paiement.'
       });
     }
 
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    // Vérifier que le compte n'a pas encore été activé (password non défini)
+    const oldEmail = session.customer_email?.toLowerCase();
+    const { data: existingUser } = await supabaseService.supabase
+      .from('users')
+      .select('id, requires_password_setup')
+      .eq('email', oldEmail)
+      .single();
+
+    if (existingUser && !existingUser.requires_password_setup) {
+      return res.status(403).json({
+        success: false,
+        error: 'Ce compte est déjà activé. Utilisez la page de connexion.'
+      });
+    }
+
     if (!session || session.payment_status !== 'paid') {
       return res.status(400).json({
         success: false,
@@ -432,68 +891,118 @@ router.post('/resend-magic-link', async (req, res) => {
       });
     }
 
-    const oldEmail = session.customer_email;
-
     // Chercher l'utilisateur avec l'ancien email
-    const { data: user, error: userError } = await supabaseService.supabase
+    let { data: user, error: userError } = await supabaseService.supabase
       .from('users')
       .select('*')
       .eq('email', oldEmail)
       .single();
 
+    // Si l'utilisateur n'existe pas encore (webhook pas encore traité), le créer
     if (userError || !user) {
-      return res.status(404).json({
-        success: false,
-        error: 'Utilisateur non trouvé'
+      logger.warn('stripe', 'Utilisateur non trouve, creation depuis resend-magic-link...');
+
+      // Récupérer ou créer le tenant
+      const planLimits = PLAN_LIMITS[session.metadata?.plan] || PLAN_LIMITS.essentiel;
+
+      const { data: existingTenant } = await supabaseService.supabase
+        .from('tenants')
+        .select('*')
+        .eq('email', oldEmail)
+        .single();
+
+      let tenant;
+      if (existingTenant) {
+        tenant = existingTenant;
+      } else {
+        tenant = await supabaseService.createTenant({
+          email: oldEmail,
+          company_name: session.metadata?.companyName || 'Mon agence',
+          responsable_name: session.metadata?.responsableName || null,
+          account_type: session.metadata?.accountType || 'agency',
+          plan: session.metadata?.plan || 'essentiel',
+          monthly_conversation_limit: planLimits.monthly_conversation_limit,
+          max_users: planLimits.max_users,
+          stripe_customer_id: session.customer,
+          stripe_subscription_id: session.subscription,
+          status: 'pending_onboarding'
+        });
+        logger.info('stripe', `Tenant cree depuis resend: ${tenant.tenant_id}`);
+      }
+
+      // Créer l'utilisateur
+      user = await authService.createUserWithoutPassword(tenant.tenant_id, {
+        email: oldEmail,
+        companyName: session.metadata?.companyName || 'Mon agence',
+        role: 'manager'
       });
+      logger.info('stripe', `Utilisateur cree depuis resend: ${user.id}`);
     }
 
-    // Vérifier que le nouvel email n'est pas déjà utilisé
-    const { data: existingUsers } = await supabaseService.supabase
-      .from('users')
-      .select('id')
-      .eq('email', newEmail);
+    const normalizedNewEmail = newEmail.toLowerCase();
 
-    if (existingUsers && existingUsers.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cet email est déjà utilisé par un autre compte'
-      });
-    }
+    // Si l'email change, vérifier et mettre à jour
+    if (normalizedNewEmail !== oldEmail) {
+      // Vérifier que le nouvel email n'est pas déjà utilisé par un autre utilisateur
+      const { data: existingUsers } = await supabaseService.supabase
+        .from('users')
+        .select('id')
+        .eq('email', normalizedNewEmail)
+        .neq('id', user.id);
 
-    // Mettre à jour l'email de l'utilisateur
-    const { error: updateError } = await supabaseService.supabase
-      .from('users')
-      .update({ email: newEmail })
-      .eq('id', user.id);
+      if (existingUsers && existingUsers.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cet email est déjà utilisé par un autre compte'
+        });
+      }
 
-    if (updateError) {
-      console.error('❌ Erreur mise à jour email:', updateError);
-      return res.status(500).json({
-        success: false,
-        error: 'Erreur lors de la mise à jour de l\'email'
-      });
+      // Mettre à jour l'email de l'utilisateur
+      const { error: updateError } = await supabaseService.supabase
+        .from('users')
+        .update({ email: normalizedNewEmail })
+        .eq('id', user.id);
+
+      if (updateError) {
+        logger.error('stripe', 'Erreur mise a jour email', updateError.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Erreur lors de la mise à jour de l\'email'
+        });
+      }
+
+      // Mettre à jour l'email dans la table tenants
+      const { error: tenantUpdateError } = await supabaseService.supabase
+        .from('tenants')
+        .update({ email: normalizedNewEmail, updated_at: new Date().toISOString() })
+        .eq('tenant_id', user.tenant_id)
+        .eq('email', oldEmail);
+
+      if (tenantUpdateError) {
+        logger.warn('stripe', 'Erreur mise a jour email tenant', tenantUpdateError.message);
+      }
     }
 
     // Générer un nouveau magic link
     const magicLink = await magicLinkService.generateMagicLink(user.id);
 
-    // Envoyer l'email au nouvel email
+    // Envoyer l'email
+    const targetEmail = normalizedNewEmail || oldEmail;
     const emailResult = await emailService.sendMagicLinkEmail(
-      newEmail,
+      targetEmail,
       magicLink,
       session.metadata?.companyName || 'votre agence'
     );
 
     if (!emailResult.success) {
-      console.error('❌ Erreur envoi email:', emailResult.error);
+      logger.error('stripe', 'Erreur envoi email', emailResult.error);
       return res.status(500).json({
         success: false,
         error: 'Erreur lors de l\'envoi de l\'email'
       });
     }
 
-    console.log(`📧 Magic link renvoyé de ${oldEmail} vers ${newEmail}`);
+    logger.info('stripe', `Magic link renvoye vers ${targetEmail}`);
 
     res.json({
       success: true,
@@ -501,10 +1010,10 @@ router.post('/resend-magic-link', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur resend-magic-link:', error);
+    logger.error('stripe', 'Erreur resend-magic-link', error.message, error.stack);
     res.status(500).json({
       success: false,
-      error: 'Erreur lors du renvoi de l\'email'
+      error: error.message || 'Erreur lors du renvoi de l\'email'
     });
   }
 });

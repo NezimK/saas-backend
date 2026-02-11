@@ -5,14 +5,17 @@
 
 const crypto = require('crypto');
 const supabaseService = require('./supabaseService');
+const logger = require('./logger');
 
 // =============================================================================
 // CHIFFREMENT AES-256
 // =============================================================================
 
 // Clé de chiffrement (doit être 32 bytes = 64 caractères hex)
-const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY ||
-  '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+if (!process.env.TOKEN_ENCRYPTION_KEY) {
+  throw new Error('FATAL: TOKEN_ENCRYPTION_KEY environment variable is required. Server cannot start without it.');
+}
+const ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY;
 const IV_LENGTH = 16;
 
 /**
@@ -33,8 +36,8 @@ function encrypt(text) {
     encrypted += cipher.final('hex');
     return iv.toString('hex') + ':' + encrypted;
   } catch (error) {
-    console.error('Encryption error:', error.message);
-    return text;
+    logger.error('calendar-token', 'CRITICAL: Encryption failed - refusing to store plaintext', error.message);
+    throw new Error('Encryption failed: ' + error.message);
   }
 }
 
@@ -58,8 +61,8 @@ function decrypt(text) {
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (error) {
-    console.error('Decryption error:', error.message);
-    return text;
+    logger.error('calendar-token', 'CRITICAL: Decryption failed', error.message);
+    throw new Error('Decryption failed: ' + error.message);
   }
 }
 
@@ -100,7 +103,7 @@ async function saveUserTokens(userId, userEmail, tokens, provider = 'google') {
     .single();
 
   if (error) {
-    console.error('Error saving calendar tokens:', error);
+    logger.error('calendar-token', 'Error saving calendar tokens', error.message);
     throw new Error(`Failed to save tokens: ${error.message}`);
   }
 
@@ -126,7 +129,7 @@ async function getUserTokens(userId, provider = 'google') {
       // Pas de résultat trouvé
       return null;
     }
-    console.error('Error getting calendar tokens:', error);
+    logger.error('calendar-token', 'Error getting calendar tokens', error.message);
     return null;
   }
 
@@ -153,7 +156,7 @@ async function deleteUserTokens(userId, provider = 'google') {
     .eq('provider', provider);
 
   if (error) {
-    console.error('Error deleting calendar tokens:', error);
+    logger.error('calendar-token', 'Error deleting calendar tokens', error.message);
     throw new Error(`Failed to delete tokens: ${error.message}`);
   }
 
@@ -172,7 +175,7 @@ async function getConnectedProviders(userId) {
     .eq('user_id', userId);
 
   if (error) {
-    console.error('Error checking connected providers:', error);
+    logger.error('calendar-token', 'Error checking connected providers', error.message);
     return { google: false, outlook: false };
   }
 

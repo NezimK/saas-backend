@@ -7,6 +7,7 @@ const { ConfidentialClientApplication } = require('@azure/msal-node');
 const { Client } = require('@microsoft/microsoft-graph-client');
 const crypto = require('crypto');
 const calendarTokenService = require('./calendarTokenService');
+const logger = require('./logger');
 
 // Secret pour signer le state OAuth (protection CSRF)
 const STATE_SECRET = process.env.STATE_SECRET || 'default-state-secret-change-me-in-production';
@@ -85,7 +86,7 @@ function verifySignedState(state) {
 
     return data;
   } catch (error) {
-    console.error('Outlook state verification failed:', error.message);
+    logger.error('outlook-calendar', 'Outlook state verification failed', error.message);
     throw new Error('Invalid OAuth state');
   }
 }
@@ -194,7 +195,7 @@ async function refreshOutlookToken(userId, userTokens) {
 
     return response.accessToken;
   } catch (error) {
-    console.error('Error refreshing Outlook token:', error);
+    logger.error('outlook-calendar', 'Error refreshing Outlook token', error.message);
     throw new Error('Failed to refresh Outlook token. Please reconnect.');
   }
 }
@@ -213,6 +214,13 @@ async function createCalendarEvent(userId, eventDetails) {
       body: {
         contentType: 'HTML',
         content: eventDetails.description || '',
+      },
+      location: {
+        displayName: eventDetails.location || '',
+        locationType: 'default',
+        address: {
+          street: eventDetails.location || '',
+        },
       },
       start: {
         dateTime: eventDetails.startDateTime,
@@ -234,7 +242,53 @@ async function createCalendarEvent(userId, eventDetails) {
       eventLink: response.webLink,
     };
   } catch (error) {
-    console.error('Error creating Outlook calendar event:', error);
+    logger.error('outlook-calendar', 'Error creating Outlook calendar event', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Mettre à jour un événement Outlook Calendar existant
+ * @param {string} userId - ID de l'utilisateur
+ * @param {string} eventId - ID de l'événement à modifier
+ * @param {Object} eventDetails - Nouveaux détails de l'événement
+ */
+async function updateCalendarEvent(userId, eventId, eventDetails) {
+  try {
+    const client = await getGraphClient(userId);
+
+    const event = {
+      subject: eventDetails.title,
+      body: {
+        contentType: 'HTML',
+        content: eventDetails.description || '',
+      },
+      location: {
+        displayName: eventDetails.location || '',
+        locationType: 'default',
+        address: {
+          street: eventDetails.location || '',
+        },
+      },
+      start: {
+        dateTime: eventDetails.startDateTime,
+        timeZone: 'Europe/Paris',
+      },
+      end: {
+        dateTime: eventDetails.endDateTime,
+        timeZone: 'Europe/Paris',
+      },
+    };
+
+    const response = await client.api(`/me/events/${eventId}`).patch(event);
+
+    return {
+      success: true,
+      eventId: response.id,
+      eventLink: response.webLink,
+    };
+  } catch (error) {
+    logger.error('outlook-calendar', 'Error updating Outlook calendar event', error.message);
     throw error;
   }
 }
@@ -252,7 +306,7 @@ async function deleteCalendarEvent(userId, eventId) {
 
     return { success: true };
   } catch (error) {
-    console.error('Error deleting Outlook calendar event:', error);
+    logger.error('outlook-calendar', 'Error deleting Outlook calendar event', error.message);
     throw error;
   }
 }
@@ -262,6 +316,7 @@ module.exports = {
   exchangeCodeForTokens,
   verifySignedState,
   createCalendarEvent,
+  updateCalendarEvent,
   deleteCalendarEvent,
   getGraphClient
 };

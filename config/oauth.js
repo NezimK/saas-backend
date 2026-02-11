@@ -13,10 +13,14 @@ module.exports = {
   microsoft: {
     clientId: process.env.MICROSOFT_CLIENT_ID,
     clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    redirectUri: process.env.MICROSOFT_REDIRECT_URI || 'http://localhost:3000/auth/outlook/callback',
+    redirectUri: process.env.MICROSOFT_EMAIL_REDIRECT_URI || 'http://localhost:3000/auth/outlook/callback',
+    tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
     scopes: [
-      'https://outlook.office.com/IMAP.AccessAsUser.All',
-      'offline_access'
+      'openid',
+      'profile',
+      'offline_access',
+      'Mail.Read',
+      'Mail.ReadWrite'
     ]
   }
 };

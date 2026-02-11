@@ -7,10 +7,14 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const supabaseService = require('./supabaseService');
+const logger = require('./logger');
 
 class AuthService {
   constructor() {
-    this.JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
+    if (!process.env.JWT_SECRET) {
+      throw new Error('FATAL: JWT_SECRET environment variable is required. Server cannot start without it.');
+    }
+    this.JWT_SECRET = process.env.JWT_SECRET;
     this.JWT_EXPIRES_IN = '15m'; // Access token court
     this.REFRESH_TOKEN_EXPIRES_DAYS = 7;
   }
@@ -63,7 +67,7 @@ class AuthService {
       });
 
     if (error) {
-      console.error('Erreur création refresh token:', error);
+      logger.error('auth', 'Erreur creation refresh token', error.message);
       throw new Error('Impossible de créer le refresh token');
     }
 
@@ -126,7 +130,7 @@ class AuthService {
       .single();
 
     if (error) {
-      console.error('Erreur création utilisateur:', error);
+      logger.error('auth', 'Erreur creation utilisateur', error.message);
       throw new Error(error.message);
     }
 
@@ -209,7 +213,7 @@ class AuthService {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     let password = '';
     for (let i = 0; i < length; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+      password += chars.charAt(crypto.randomInt(chars.length));
     }
     return password;
   }
@@ -270,7 +274,7 @@ class AuthService {
       .single();
 
     if (error) {
-      console.error('Erreur création utilisateur sans password:', error);
+      logger.error('auth', 'Erreur creation utilisateur sans password', error.message);
       throw new Error(error.message);
     }
 
@@ -323,6 +327,35 @@ class AuthService {
     }
 
     return true;
+  }
+
+  /**
+   * Génère un token d'onboarding pour protéger les endpoints post-paiement
+   * Valide 48h pour laisser le temps de compléter l'onboarding
+   */
+  generateOnboardingToken(tenantId) {
+    return jwt.sign(
+      { tenantId, purpose: 'onboarding' },
+      this.JWT_SECRET,
+      { expiresIn: '48h' }
+    );
+  }
+
+  /**
+   * Formate un objet user pour la réponse API
+   */
+  formatUserResponse(user) {
+    return {
+      id: user.id,
+      email: user.email,
+      name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+      firstName: user.first_name,
+      lastName: user.last_name,
+      role: user.role,
+      tenant_id: user.tenant_id,
+      agency: user.tenant_id,
+      agencyName: user.tenants?.company_name || 'Mon Agence'
+    };
   }
 
   /**

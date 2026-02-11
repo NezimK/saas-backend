@@ -6,6 +6,7 @@
 const { google } = require('googleapis');
 const crypto = require('crypto');
 const calendarTokenService = require('./calendarTokenService');
+const logger = require('./logger');
 
 // Secret pour signer le state OAuth (protection CSRF)
 const STATE_SECRET = process.env.STATE_SECRET || 'default-state-secret-change-me-in-production';
@@ -70,7 +71,7 @@ function verifySignedState(state) {
 
     return data;
   } catch (error) {
-    console.error('State verification failed:', error.message);
+    logger.error('google-calendar', 'State verification failed', error.message);
     throw new Error('Invalid OAuth state');
   }
 }
@@ -179,6 +180,7 @@ async function createCalendarEvent(userId, eventDetails) {
     const event = {
       summary: eventDetails.title,
       description: eventDetails.description,
+      location: eventDetails.location || '',
       start: {
         dateTime: eventDetails.startDateTime,
         timeZone: 'Europe/Paris',
@@ -207,7 +209,60 @@ async function createCalendarEvent(userId, eventDetails) {
       eventLink: response.data.htmlLink
     };
   } catch (error) {
-    console.error('Error creating calendar event:', error);
+    logger.error('google-calendar', 'Error creating calendar event', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Mettre à jour un événement Google Calendar existant
+ * @param {string} userId - ID de l'utilisateur
+ * @param {string} eventId - ID de l'événement à modifier
+ * @param {Object} eventDetails - Nouveaux détails de l'événement
+ */
+async function updateCalendarEvent(userId, eventId, eventDetails) {
+  try {
+    const accessToken = await getValidAccessToken(userId);
+
+    const oauth2Client = getOAuth2Client();
+    oauth2Client.setCredentials({ access_token: accessToken });
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    const event = {
+      summary: eventDetails.title,
+      description: eventDetails.description,
+      location: eventDetails.location || '',
+      start: {
+        dateTime: eventDetails.startDateTime,
+        timeZone: 'Europe/Paris',
+      },
+      end: {
+        dateTime: eventDetails.endDateTime,
+        timeZone: 'Europe/Paris',
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: 'popup', minutes: 30 },
+          { method: 'popup', minutes: 1440 },
+        ],
+      },
+    };
+
+    const response = await calendar.events.update({
+      calendarId: 'primary',
+      eventId: eventId,
+      resource: event,
+    });
+
+    return {
+      success: true,
+      eventId: response.data.id,
+      eventLink: response.data.htmlLink
+    };
+  } catch (error) {
+    logger.error('google-calendar', 'Error updating calendar event', error.message);
     throw error;
   }
 }
@@ -233,7 +288,7 @@ async function deleteCalendarEvent(userId, eventId) {
 
     return { success: true };
   } catch (error) {
-    console.error('Error deleting calendar event:', error);
+    logger.error('google-calendar', 'Error deleting calendar event', error.message);
     throw error;
   }
 }
@@ -244,6 +299,7 @@ module.exports = {
   exchangeCodeForTokens,
   verifySignedState,
   createCalendarEvent,
+  updateCalendarEvent,
   deleteCalendarEvent,
   getValidAccessToken
 };

@@ -1,6 +1,8 @@
 const { google } = require('googleapis');
 const oauthConfig = require('../config/oauth');
 const supabaseService = require('./supabaseService');
+const { encrypt, decrypt } = require('./calendarTokenService');
+const logger = require('./logger');
 
 class GmailTokenService {
   /**
@@ -17,7 +19,7 @@ class GmailTokenService {
    */
   async refreshAccessToken(tenantId) {
     try {
-      console.log(`🔄 Refresh du token pour tenant: ${tenantId}`);
+      logger.info('gmail-token', `Refresh du token pour tenant: ${tenantId}`);
 
       // Récupérer les tokens actuels
       const { data: tenant, error } = await supabaseService.supabase
@@ -30,7 +32,14 @@ class GmailTokenService {
         throw new Error(`Tenant ${tenantId} n'a pas de tokens OAuth`);
       }
 
-      const currentTokens = tenant.email_oauth_tokens;
+      const storedTokens = tenant.email_oauth_tokens;
+
+      // Déchiffrer les tokens stockés
+      const currentTokens = {
+        ...storedTokens,
+        access_token: decrypt(storedTokens.access_token),
+        refresh_token: decrypt(storedTokens.refresh_token)
+      };
 
       // Configurer OAuth2 client
       const oauth2Client = new google.auth.OAuth2(
@@ -46,31 +55,30 @@ class GmailTokenService {
       // Refresh le token
       const { credentials } = await oauth2Client.refreshAccessToken();
 
-      // Nouveaux tokens
-      const newTokens = {
-        ...currentTokens,
-        access_token: credentials.access_token,
+      // Chiffrer et sauvegarder les nouveaux tokens
+      const tokensToStore = {
+        ...storedTokens,
+        access_token: encrypt(credentials.access_token),
         expiry_date: credentials.expiry_date,
         token_type: credentials.token_type || 'Bearer'
       };
 
-      // Sauvegarder dans Supabase
+      // Sauvegarder dans Supabase (chiffré)
       const { error: updateError } = await supabaseService.supabase
         .from('tenants')
-        .update({ email_oauth_tokens: newTokens })
+        .update({ email_oauth_tokens: tokensToStore })
         .eq('tenant_id', tenantId);
 
       if (updateError) {
         throw new Error(`Erreur sauvegarde tokens: ${updateError.message}`);
       }
 
-      console.log(`✅ Token refreshé pour tenant: ${tenantId}`);
-      console.log(`   Nouveau expiry: ${new Date(credentials.expiry_date).toISOString()}`);
+      logger.info('gmail-token', `Token refreshe pour tenant: ${tenantId}`);
 
-      return newTokens.access_token;
+      return credentials.access_token;
 
     } catch (error) {
-      console.error(`❌ Erreur refresh token pour ${tenantId}:`, error.message);
+      logger.error('gmail-token', `Erreur refresh token pour ${tenantId}`, error.message);
       throw error;
     }
   }
@@ -91,19 +99,19 @@ class GmailTokenService {
         throw new Error(`Tenant ${tenantId} n'a pas de tokens OAuth`);
       }
 
-      const tokens = tenant.email_oauth_tokens;
+      const storedTokens = tenant.email_oauth_tokens;
 
       // Vérifier si le token est expiré
-      if (this.isTokenExpired(tokens.expiry_date)) {
-        console.log(`⚠️  Token expiré pour ${tenantId}, refresh...`);
+      if (this.isTokenExpired(storedTokens.expiry_date)) {
+        logger.warn('gmail-token', `Token expire pour ${tenantId}, refresh...`);
         return await this.refreshAccessToken(tenantId);
       }
 
-      console.log(`✅ Token valide pour ${tenantId}`);
-      return tokens.access_token;
+      logger.info('gmail-token', `Token valide pour ${tenantId}`);
+      return decrypt(storedTokens.access_token);
 
     } catch (error) {
-      console.error(`❌ Erreur getValidAccessToken pour ${tenantId}:`, error.message);
+      logger.error('gmail-token', `Erreur getValidAccessToken pour ${tenantId}`, error.message);
       throw error;
     }
   }

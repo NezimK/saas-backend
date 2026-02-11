@@ -5,6 +5,9 @@ const authService = require('../services/authService');
 const whatsappPoolService = require('../services/whatsappPoolService');
 const { v4: uuidv4 } = require('uuid');
 const axios = require('axios');
+const { verifyOnboardingToken, authMiddleware, requireRole } = require('../middlewares/authMiddleware');
+const { DEFAULT_EMAIL_FILTERS } = require('../config/constants');
+const logger = require('../services/logger');
 
 /**
  * POST /api/onboarding/get-or-create-tenant
@@ -18,7 +21,7 @@ router.post('/get-or-create-tenant', async (req, res) => {
       return res.status(400).json({ error: 'Email requis' });
     }
 
-    console.log(`🔍 Recherche tenant pour: ${email}`);
+    logger.info('onboarding', `Recherche tenant pour: ${email}`);
 
     // Vérifier si un tenant existe avec cet email
     const { data: existingTenant, error: searchError } = await supabaseService.supabase
@@ -28,13 +31,13 @@ router.post('/get-or-create-tenant', async (req, res) => {
       .single();
 
     if (searchError && searchError.code !== 'PGRST116') { // PGRST116 = no rows found
-      console.error('Erreur recherche tenant:', searchError);
+      logger.error('onboarding', 'Erreur recherche tenant', searchError.message);
       return res.status(500).json({ error: 'Erreur lors de la recherche du tenant' });
     }
 
     // Si le tenant existe, le retourner
     if (existingTenant) {
-      console.log(`✅ Tenant existant trouvé: ${existingTenant.tenant_id}`);
+      logger.info('onboarding', `Tenant existant trouve: ${existingTenant.tenant_id}`);
       return res.json({
         success: true,
         tenantId: existingTenant.tenant_id,
@@ -48,7 +51,7 @@ router.post('/get-or-create-tenant', async (req, res) => {
 
     // Sinon, créer un nouveau tenant
     const tenantId = uuidv4();
-    console.log(`🆕 Création d'un nouveau tenant: ${tenantId}`);
+    logger.info('onboarding', `Creation d'un nouveau tenant: ${tenantId}`);
 
     const { error: insertError } = await supabaseService.supabase
       .from('tenants')
@@ -56,15 +59,15 @@ router.post('/get-or-create-tenant', async (req, res) => {
         tenant_id: tenantId,
         email,
         company_name: `Client ${tenantId.substring(0, 8)}`,
-        email_filters: ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com']
+        email_filters: DEFAULT_EMAIL_FILTERS
       }]);
 
     if (insertError) {
-      console.error('Erreur création tenant:', insertError);
+      logger.error('onboarding', 'Erreur creation tenant', insertError.message);
       return res.status(500).json({ error: 'Erreur lors de la création du tenant' });
     }
 
-    console.log(`✅ Nouveau tenant créé: ${tenantId}`);
+    logger.info('onboarding', `Nouveau tenant cree: ${tenantId}`);
 
     // Créer automatiquement un compte utilisateur manager pour le dashboard
     const temporaryPassword = authService.generateTemporaryPassword();
@@ -76,23 +79,22 @@ router.post('/get-or-create-tenant', async (req, res) => {
         lastName: '',
         role: 'manager'
       });
-      console.log(`✅ Compte manager créé pour ${email}`);
+      logger.info('onboarding', `Compte manager cree pour ${email}`);
     } catch (userError) {
-      console.error('Erreur création compte manager:', userError);
+      logger.error('onboarding', 'Erreur creation compte manager', userError.message);
       // On continue même si la création du user échoue (le tenant est créé)
     }
 
     res.json({
       success: true,
       tenantId,
-      emailFilters: ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'],
+      emailFilters: DEFAULT_EMAIL_FILTERS,
       isExisting: false,
-      temporaryPassword, // Retourner le mot de passe temporaire pour l'afficher à l'utilisateur
-      message: 'Tenant et compte manager créés avec succès'
+      message: 'Tenant et compte manager créés avec succès. Un email de configuration sera envoyé après le paiement.'
     });
 
   } catch (error) {
-    console.error('Erreur get-or-create-tenant:', error);
+    logger.error('onboarding', 'Erreur get-or-create-tenant', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -101,7 +103,7 @@ router.post('/get-or-create-tenant', async (req, res) => {
  * POST /api/onboarding/update-account-info
  * Met à jour le type de compte et le nom de l'entreprise
  */
-router.post('/update-account-info', async (req, res) => {
+router.post('/update-account-info', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId, accountType, companyName } = req.body;
 
@@ -117,7 +119,7 @@ router.post('/update-account-info', async (req, res) => {
       return res.status(400).json({ error: 'companyName requis' });
     }
 
-    console.log(`📝 Mise à jour des infos pour ${tenantId}: ${accountType} - ${companyName}`);
+    logger.info('onboarding', `Mise à jour des infos pour ${tenantId} : ${accountType} - ${companyName}`);
 
     const { error } = await supabaseService.supabase
       .from('tenants')
@@ -128,11 +130,11 @@ router.post('/update-account-info', async (req, res) => {
       .eq('tenant_id', tenantId);
 
     if (error) {
-      console.error('Erreur mise à jour tenant:', error);
+      logger.error('onboarding', 'Erreur mise à jour tenant', error.message);
       return res.status(500).json({ error: 'Erreur lors de la mise à jour du tenant' });
     }
 
-    console.log(`✅ Infos mises à jour pour ${tenantId}`);
+    logger.info('onboarding', `Infos mises a jour pour ${tenantId}`);
 
     res.json({
       success: true,
@@ -140,59 +142,17 @@ router.post('/update-account-info', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur update-account-info:', error);
+    logger.error('onboarding', 'Erreur update-account-info', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * POST /api/onboarding/create-tenant
- * Crée un nouveau tenant avec un ID unique
- * @deprecated Utiliser get-or-create-tenant à la place
- */
-router.post('/create-tenant', async (req, res) => {
-  try {
-    const { companyName, email } = req.body;
-
-    // Générer un tenantId unique
-    const tenantId = uuidv4();
-
-    console.log(`🆕 Création d'un nouveau tenant: ${tenantId}`);
-
-    // Créer le tenant dans Supabase
-    const { error } = await supabaseService.supabase
-      .from('tenants')
-      .insert([{
-        tenant_id: tenantId,
-        email,
-        company_name: companyName || `Client ${tenantId.substring(0, 8)}`,
-        email_filters: ['leboncoin.fr', 'seloger.com', 'pap.fr', 'logic-immo.com', 'bienici.com'] // Valeurs par défaut
-      }]);
-
-    if (error) {
-      console.error('Erreur création tenant:', error);
-      return res.status(500).json({ error: 'Erreur lors de la création du tenant' });
-    }
-
-    console.log(`✅ Tenant créé: ${tenantId}`);
-
-    res.json({
-      success: true,
-      tenantId,
-      message: 'Tenant créé avec succès'
-    });
-
-  } catch (error) {
-    console.error('Erreur create-tenant:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 /**
  * POST /api/onboarding/update-filters
  * Met à jour les filtres email du tenant
  */
-router.post('/update-filters', async (req, res) => {
+router.post('/update-filters', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId, emailFilters } = req.body;
 
@@ -222,7 +182,7 @@ router.post('/update-filters', async (req, res) => {
         }]);
 
       if (insertError) {
-        console.error('Erreur création tenant:', insertError);
+        logger.error('onboarding', 'Erreur creation tenant', insertError.message);
         return res.status(500).json({ error: 'Erreur lors de la création du tenant' });
       }
     } else {
@@ -233,12 +193,12 @@ router.post('/update-filters', async (req, res) => {
         .eq('tenant_id', tenantId);
 
       if (updateError) {
-        console.error('Erreur mise à jour filtres:', updateError);
+        logger.error('onboarding', 'Erreur mise à jour filtres', updateError.message);
         return res.status(500).json({ error: 'Erreur lors de la mise à jour des filtres' });
       }
     }
 
-    console.log(`✅ Filtres email mis à jour pour ${tenantId}:`, emailFilters);
+    logger.info('onboarding', `Filtres email mis a jour pour ${tenantId}`, emailFilters);
 
     res.json({
       success: true,
@@ -247,7 +207,7 @@ router.post('/update-filters', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur update-filters:', error);
+    logger.error('onboarding', 'Erreur update-filters', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -256,7 +216,7 @@ router.post('/update-filters', async (req, res) => {
  * GET /api/onboarding/tenant/:tenantId
  * Recupere les informations completes d'un tenant pour l'onboarding
  */
-router.get('/tenant/:tenantId', async (req, res) => {
+router.get('/tenant/:tenantId', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId } = req.params;
 
@@ -267,7 +227,7 @@ router.get('/tenant/:tenantId', async (req, res) => {
       });
     }
 
-    console.log(`Chargement tenant pour onboarding: ${tenantId}`);
+    logger.info('onboarding', `Chargement tenant pour onboarding: ${tenantId}`);
 
     const { data: tenant, error } = await supabaseService.supabase
       .from('tenants')
@@ -276,14 +236,14 @@ router.get('/tenant/:tenantId', async (req, res) => {
       .single();
 
     if (error || !tenant) {
-      console.error('Tenant non trouve:', tenantId, error);
+      logger.error('onboarding', `Tenant non trouvé : ${tenantId}`, error?.message);
       return res.status(404).json({
         success: false,
-        error: 'Tenant non trouve. Veuillez utiliser le lien recu par email.'
+        error: 'Tenant non trouvé. Veuillez utiliser le lien reçu par email.'
       });
     }
 
-    console.log(`Tenant charge: ${tenant.company_name}`);
+    logger.info('onboarding', `Tenant charge: ${tenant.company_name}`);
 
     res.json({
       success: true,
@@ -302,7 +262,7 @@ router.get('/tenant/:tenantId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur get tenant:', error);
+    logger.error('onboarding', 'Erreur get tenant', error.message);
     res.status(500).json({
       success: false,
       error: 'Erreur serveur'
@@ -314,7 +274,7 @@ router.get('/tenant/:tenantId', async (req, res) => {
  * GET /api/onboarding/filters/:tenantId
  * Récupère les filtres email d'un tenant
  */
-router.get('/filters/:tenantId', async (req, res) => {
+router.get('/filters/:tenantId', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId } = req.params;
 
@@ -334,7 +294,7 @@ router.get('/filters/:tenantId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur get-filters:', error);
+    logger.error('onboarding', 'Erreur get-filters', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -344,7 +304,7 @@ router.get('/filters/:tenantId', async (req, res) => {
  * Marque l'onboarding comme termine et retourne l'URL du dashboard
  * Assigne automatiquement un numéro WhatsApp du pool
  */
-router.post('/complete', async (req, res) => {
+router.post('/complete', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId } = req.body;
 
@@ -352,7 +312,7 @@ router.post('/complete', async (req, res) => {
       return res.status(400).json({ error: 'tenantId requis' });
     }
 
-    console.log(`Finalisation onboarding pour tenant: ${tenantId}`);
+    logger.info('onboarding', `Finalisation onboarding pour tenant: ${tenantId}`);
 
     // Marquer le tenant comme actif
     const { error } = await supabaseService.supabase
@@ -364,7 +324,7 @@ router.post('/complete', async (req, res) => {
       .eq('tenant_id', tenantId);
 
     if (error) {
-      console.error('Erreur finalisation onboarding:', error);
+      logger.error('onboarding', 'Erreur finalisation onboarding', error.message);
       return res.status(500).json({ error: 'Erreur lors de la finalisation' });
     }
 
@@ -372,12 +332,12 @@ router.post('/complete', async (req, res) => {
     const whatsappResult = await whatsappPoolService.assignNumberToTenant(tenantId);
 
     if (!whatsappResult.success) {
-      console.warn(`⚠️ Pas de numéro WhatsApp disponible pour ${tenantId}: ${whatsappResult.error}`);
+      logger.warn('onboarding', `Pas de numero WhatsApp disponible pour ${tenantId}: ${whatsappResult.error}`);
     } else {
-      console.log(`📱 WhatsApp assigné: ${whatsappResult.phoneNumber} (déjà assigné: ${whatsappResult.alreadyAssigned})`);
+      logger.info('onboarding', `WhatsApp assigne: ${whatsappResult.phoneNumber} (deja assigne: ${whatsappResult.alreadyAssigned})`);
     }
 
-    console.log(`✅ Onboarding terminé pour tenant: ${tenantId}`);
+    logger.info('onboarding', `Onboarding termine pour tenant: ${tenantId}`);
 
     res.json({
       success: true,
@@ -387,7 +347,7 @@ router.post('/complete', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur complete:', error);
+    logger.error('onboarding', 'Erreur complete', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -400,7 +360,7 @@ router.post('/complete', async (req, res) => {
  * POST /api/onboarding/whatsapp-number
  * Configure le numéro WhatsApp unique de l'agence
  */
-router.post('/whatsapp-number', async (req, res) => {
+router.post('/whatsapp-number', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId, whatsappNumber } = req.body;
 
@@ -428,7 +388,7 @@ router.post('/whatsapp-number', async (req, res) => {
       });
     }
 
-    console.log(`📱 Configuration WhatsApp pour ${tenantId}: ${normalizedNumber}`);
+    logger.info('onboarding', `Configuration WhatsApp pour ${tenantId}: ${normalizedNumber}`);
 
     // Vérifier que le numéro n'est pas déjà utilisé par un autre tenant
     const { data: existing, error: checkError } = await supabaseService.supabase
@@ -439,7 +399,7 @@ router.post('/whatsapp-number', async (req, res) => {
       .maybeSingle();
 
     if (checkError) {
-      console.error('Erreur vérification unicité:', checkError);
+      logger.error('onboarding', 'Erreur verification unicite', checkError.message);
       return res.status(500).json({ error: 'Erreur lors de la vérification du numéro' });
     }
 
@@ -456,11 +416,11 @@ router.post('/whatsapp-number', async (req, res) => {
       .eq('tenant_id', tenantId);
 
     if (updateError) {
-      console.error('Erreur mise à jour WhatsApp:', updateError);
+      logger.error('onboarding', 'Erreur mise à jour WhatsApp', updateError.message);
       return res.status(500).json({ error: 'Erreur lors de la sauvegarde du numéro' });
     }
 
-    console.log(`✅ Numéro WhatsApp configuré pour ${tenantId}: ${normalizedNumber}`);
+    logger.info('onboarding', `Numero WhatsApp configure pour ${tenantId}: ${normalizedNumber}`);
 
     res.json({
       success: true,
@@ -469,12 +429,12 @@ router.post('/whatsapp-number', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur whatsapp-number:', error);
+    logger.error('onboarding', 'Erreur whatsapp-number', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post('/validate-netty-api', async (req, res) => {
+router.post('/validate-netty-api', verifyOnboardingToken, async (req, res) => {
   try {
     const { tenantId, apiKey } = req.body;
 
@@ -482,7 +442,7 @@ router.post('/validate-netty-api', async (req, res) => {
       return res.status(400).json({ error: 'tenantId et apiKey requis' });
     }
 
-    console.log(`🔑 Validation clé API Netty pour tenant: ${tenantId}`);
+    logger.info('onboarding', `Validation clé API Netty pour tenant : ${tenantId}`);
 
     // Tester la clé API en appelant l'API Netty
     try {
@@ -497,7 +457,7 @@ router.post('/validate-netty-api', async (req, res) => {
       });
 
       if (testResponse.status === 200) {
-        console.log('✅ Clé API Netty valide');
+        logger.info('onboarding', 'Clé API Netty valide');
 
         // Sauvegarder la clé API dans Supabase
         const { error: updateError } = await supabaseService.supabase
@@ -511,25 +471,25 @@ router.post('/validate-netty-api', async (req, res) => {
           .eq('tenant_id', tenantId);
 
         if (updateError) {
-          console.error('Erreur sauvegarde clé API:', updateError);
+          logger.error('onboarding', 'Erreur sauvegarde clé API', updateError.message);
           return res.status(500).json({ error: 'Erreur lors de la sauvegarde de la clé API' });
         }
 
-        console.log(`✅ Clé API Netty sauvegardée pour ${tenantId}`);
+        logger.info('onboarding', `Clé API Netty sauvegardée pour ${tenantId}`);
 
         // Déclencher la synchronisation Netty via n8n
         try {
-          console.log(`🚀 Déclenchement sync Netty pour ${tenantId}...`);
+          logger.info('onboarding', `Déclenchement sync Netty pour ${tenantId}...`);
           await axios.post('https://n8n.emkai.fr/webhook/sync-netty-single', {
             tenant_id: tenantId
           }, {
             headers: { 'Content-Type': 'application/json' },
             timeout: 5000 // Timeout court pour ne pas bloquer la réponse
           });
-          console.log(`✅ Sync Netty déclenché pour ${tenantId}`);
+          logger.info('onboarding', `Sync Netty declenche pour ${tenantId}`);
         } catch (syncError) {
           // Log l'erreur mais ne bloque pas la réponse
-          console.error(`⚠️ Erreur déclenchement sync Netty: ${syncError.message}`);
+          logger.error('onboarding', 'Erreur déclenchement sync Netty', syncError.message);
         }
 
         return res.json({
@@ -540,7 +500,7 @@ router.post('/validate-netty-api', async (req, res) => {
       }
 
     } catch (apiError) {
-      console.error('❌ Erreur validation API Netty:', apiError.response?.status, apiError.response?.data);
+      logger.error('onboarding', `Erreur validation API Netty: ${apiError.response?.status}`, apiError.response?.data);
 
       if (apiError.response?.status === 401 || apiError.response?.status === 403) {
         return res.status(401).json({
@@ -560,7 +520,50 @@ router.post('/validate-netty-api', async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Erreur validate-netty-api:', error);
+    logger.error('onboarding', 'Erreur validate-netty-api', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/onboarding/save-notification-settings
+ * Sauvegarde les préférences de notifications d'un utilisateur
+ */
+router.post('/save-notification-settings', verifyOnboardingToken, async (req, res) => {
+  try {
+    const { userId, notificationSettings } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId requis' });
+    }
+
+    if (!notificationSettings || typeof notificationSettings !== 'object') {
+      return res.status(400).json({ error: 'notificationSettings requis' });
+    }
+
+    logger.info('onboarding', `Sauvegarde preferences notifications pour user ${userId}`, notificationSettings);
+
+    const { error } = await supabaseService.supabase
+      .from('users')
+      .update({
+        notification_settings: notificationSettings
+      })
+      .eq('id', userId);
+
+    if (error) {
+      logger.error('onboarding', 'Erreur sauvegarde notification settings', error.message);
+      return res.status(500).json({ error: 'Erreur lors de la sauvegarde des préférences' });
+    }
+
+    logger.info('onboarding', `Préférences notifications sauvegardées pour user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Préférences de notifications enregistrées'
+    });
+
+  } catch (error) {
+    logger.error('onboarding', 'Erreur save-notification-settings', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -569,7 +572,7 @@ router.post('/validate-netty-api', async (req, res) => {
  * GET /api/onboarding/whatsapp-pool
  * Récupère le statut du pool de numéros WhatsApp (admin)
  */
-router.get('/whatsapp-pool', async (req, res) => {
+router.get('/whatsapp-pool', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const status = await whatsappPoolService.getPoolStatus();
 
@@ -579,7 +582,7 @@ router.get('/whatsapp-pool', async (req, res) => {
 
     res.json(status);
   } catch (error) {
-    console.error('Erreur whatsapp-pool:', error);
+    logger.error('onboarding', 'Erreur whatsapp-pool', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -588,7 +591,7 @@ router.get('/whatsapp-pool', async (req, res) => {
  * POST /api/onboarding/whatsapp-pool/add
  * Ajouter un numéro au pool (admin)
  */
-router.post('/whatsapp-pool/add', async (req, res) => {
+router.post('/whatsapp-pool/add', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
@@ -604,7 +607,7 @@ router.post('/whatsapp-pool/add', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Erreur whatsapp-pool/add:', error);
+    logger.error('onboarding', 'Erreur whatsapp-pool/add', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -613,7 +616,7 @@ router.post('/whatsapp-pool/add', async (req, res) => {
  * POST /api/onboarding/whatsapp-pool/release
  * Libérer le numéro d'un tenant (admin)
  */
-router.post('/whatsapp-pool/release', async (req, res) => {
+router.post('/whatsapp-pool/release', authMiddleware, requireRole('admin'), async (req, res) => {
   try {
     const { tenantId } = req.body;
 
@@ -629,7 +632,7 @@ router.post('/whatsapp-pool/release', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Erreur whatsapp-pool/release:', error);
+    logger.error('onboarding', 'Erreur whatsapp-pool/release', error.message);
     res.status(500).json({ error: error.message });
   }
 });

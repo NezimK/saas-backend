@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const gmailTokenService = require('../services/gmailTokenService');
+const { authMiddleware } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
 
 /**
  * GET /api/token/gmail/:tenantId
  * Récupère un access token Gmail valide pour un tenant
  * Refresh automatiquement si expiré
  */
-router.get('/gmail/:tenantId', async (req, res) => {
+router.get('/gmail/:tenantId', authMiddleware, async (req, res) => {
   try {
     const { tenantId } = req.params;
+
+    if (req.user.tenantId !== tenantId) {
+      return res.status(403).json({ success: false, error: 'Accès non autorisé à ce tenant' });
+    }
 
     const tokenData = await gmailTokenService.getTokenForWorkflow(tenantId);
 
@@ -19,7 +25,7 @@ router.get('/gmail/:tenantId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur récupération token:', error);
+    logger.error('token', 'Erreur recuperation token', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -31,9 +37,13 @@ router.get('/gmail/:tenantId', async (req, res) => {
  * POST /api/token/gmail/:tenantId/refresh
  * Force le refresh du token
  */
-router.post('/gmail/:tenantId/refresh', async (req, res) => {
+router.post('/gmail/:tenantId/refresh', authMiddleware, async (req, res) => {
   try {
     const { tenantId } = req.params;
+
+    if (req.user.tenantId !== tenantId) {
+      return res.status(403).json({ success: false, error: 'Accès non autorisé à ce tenant' });
+    }
 
     const newAccessToken = await gmailTokenService.refreshAccessToken(tenantId);
 
@@ -45,7 +55,7 @@ router.post('/gmail/:tenantId/refresh', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur refresh token:', error);
+    logger.error('token', 'Erreur refresh token', error.message);
     res.status(500).json({
       success: false,
       error: error.message

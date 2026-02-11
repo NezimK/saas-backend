@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const supabaseService = require('./supabaseService');
+const logger = require('./logger');
 
 /**
  * Genere un magic link pour un utilisateur
@@ -28,11 +29,11 @@ async function generateMagicLink(userId) {
     .single();
 
   if (error) {
-    console.error('Erreur creation magic_link:', error);
+    logger.error('magic-link', 'Erreur creation magic_link', error.message);
     throw new Error('Impossible de creer le magic link');
   }
 
-  console.log(`Magic link cree pour user ${userId}, expire le ${expiresAt.toISOString()}`);
+  logger.info('magic-link', `Magic link cree pour user ${userId}, expire le ${expiresAt.toISOString()}`);
 
   // Construire l'URL complete (utilise BACKEND_URL car set-password.html est servi par le backend)
   const baseUrl = process.env.BACKEND_URL || 'http://localhost:3000';
@@ -58,7 +59,7 @@ async function validateMagicLink(token) {
     .single();
 
   if (linkError || !magicLink) {
-    console.log('Magic link invalide ou expire');
+    logger.warn('magic-link', 'Magic link invalide ou expire');
     return null;
   }
 
@@ -70,14 +71,14 @@ async function validateMagicLink(token) {
     .single();
 
   if (userError || !user) {
-    console.error('Utilisateur non trouve pour le magic link');
+    logger.error('magic-link', 'Utilisateur non trouve pour le magic link');
     return null;
   }
 
   // NOTE: Ne pas marquer comme utilisé ici - sera fait après la création du mot de passe
   // via markMagicLinkAsUsed()
 
-  console.log(`Magic link valide pour user ${user.email}`);
+  logger.info('magic-link', `Magic link valide pour user ${user.email}`);
   return user;
 }
 
@@ -95,11 +96,11 @@ async function markMagicLinkAsUsed(token) {
     .eq('token_hash', tokenHash);
 
   if (error) {
-    console.error('Erreur lors du marquage du magic link comme utilisé:', error);
+    logger.error('magic-link', 'Erreur lors du marquage du magic link comme utilise', error.message);
     return false;
   }
 
-  console.log('Magic link marqué comme utilisé');
+  logger.info('magic-link', 'Magic link marque comme utilise');
   return true;
 }
 
@@ -113,7 +114,7 @@ async function cleanupExpiredLinks() {
     .lt('expires_at', new Date().toISOString());
 
   if (error) {
-    console.error('Erreur cleanup magic_links:', error);
+    logger.error('magic-link', 'Erreur cleanup magic_links', error.message);
   }
 }
 

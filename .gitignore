@@ -58,6 +58,7 @@ migrations/
 workflows/
 final_workflows/
 new_workflows/
+WorkflowBeta/
 UniqueWorkflow/
 
 champ.txt

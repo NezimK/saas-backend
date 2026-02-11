@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const oauthConfig = require('../config/oauth');
+const logger = require('./logger');
 
 class GmailService {
   /**
@@ -36,7 +37,7 @@ class GmailService {
 
     for (const query of queries) {
       try {
-        console.log(`🔍 Recherche: ${query}`);
+        logger.info('gmail', `Recherche: ${query}`);
 
         // Rechercher les emails avec le filtre
         const response = await gmail.users.messages.list({
@@ -46,7 +47,7 @@ class GmailService {
         });
 
         const messages = response.data.messages || [];
-        console.log(`   Trouvé: ${messages.length} email(s)`);
+        logger.info('gmail', `Trouve: ${messages.length} email(s)`);
 
         // Récupérer les détails de chaque email
         for (const message of messages) {
@@ -60,7 +61,7 @@ class GmailService {
           allEmails.push(email);
         }
       } catch (error) {
-        console.error(`❌ Erreur recherche ${query}:`, error.message);
+        logger.error('gmail', `Erreur recherche ${query}`, error.message);
       }
     }
 
@@ -117,10 +118,10 @@ class GmailService {
         }
       });
 
-      console.log('✅ Gmail watch configuré:', response.data);
+      logger.info('gmail', 'Gmail watch configure', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Erreur setup watch:', error.message);
+      logger.error('gmail', 'Erreur setup watch', error.message);
       throw error;
     }
   }

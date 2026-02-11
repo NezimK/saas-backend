@@ -5,11 +5,19 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 
 const googleCalendarService = require('../services/googleCalendarService');
 const outlookCalendarService = require('../services/outlookCalendarService');
 const calendarTokenService = require('../services/calendarTokenService');
 const { authMiddleware } = require('../middlewares/authMiddleware');
+const logger = require('../services/logger');
+
+// Load HTML templates once at startup
+const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
+const successTemplate = fs.readFileSync(path.join(TEMPLATES_DIR, 'oauth-success.html'), 'utf8');
+const errorTemplate = fs.readFileSync(path.join(TEMPLATES_DIR, 'oauth-error.html'), 'utf8');
 
 // =============================================================================
 // GOOGLE CALENDAR ROUTES
@@ -19,11 +27,12 @@ const { authMiddleware } = require('../middlewares/authMiddleware');
  * POST /api/auth/google/url
  * Obtenir l'URL d'authentification Google OAuth2
  */
-router.post('/auth/google/url', (req, res) => {
+router.post('/auth/google/url', authMiddleware, (req, res) => {
   try {
-    const { userId, userEmail, agency } = req.body;
+    const userId = req.user.userId;
+    const { userEmail, agency } = req.body;
 
-    if (!userId || !userEmail || !agency) {
+    if (!userEmail || !agency) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -31,7 +40,7 @@ router.post('/auth/google/url', (req, res) => {
 
     res.json({ authUrl });
   } catch (error) {
-    console.error('Error generating Google auth URL:', error);
+    logger.error('calendar', 'Error generating Google auth URL', error.message);
     res.status(500).json({ error: 'Failed to generate auth URL' });
   }
 });
@@ -56,7 +65,7 @@ router.get('/auth/google/callback', async (req, res) => {
       userEmail = stateData.userEmail;
       agency = stateData.agency;
     } catch (stateError) {
-      console.error('Invalid OAuth state:', stateError.message);
+      logger.warn('calendar', 'Invalid Google OAuth state', stateError.message);
       return res.status(400).send('Invalid or expired OAuth state. Please try again.');
     }
 
@@ -69,7 +78,7 @@ router.get('/auth/google/callback', async (req, res) => {
     // Page de succès
     res.send(getSuccessPage('Google Calendar', '#C5A065'));
   } catch (error) {
-    console.error('Error in Google OAuth callback:', error);
+    logger.error('calendar', 'Error in Google OAuth callback', error.message);
     res.status(500).send(getErrorPage('Google Calendar'));
   }
 });
@@ -78,19 +87,15 @@ router.get('/auth/google/callback', async (req, res) => {
  * POST /api/auth/google/status
  * Vérifier si Google Calendar est connecté
  */
-router.post('/auth/google/status', async (req, res) => {
+router.post('/auth/google/status', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const userId = req.user.userId;
 
     const tokens = await calendarTokenService.getUserTokens(userId, 'google');
 
     res.json({ connected: !!tokens });
   } catch (error) {
-    console.error('Error checking Google connection status:', error);
+    logger.error('calendar', 'Error checking Google connection status', error.message);
     res.status(500).json({ error: 'Failed to check connection status' });
   }
 });
@@ -99,19 +104,15 @@ router.post('/auth/google/status', async (req, res) => {
  * POST /api/auth/google/disconnect
  * Déconnecter Google Calendar
  */
-router.post('/auth/google/disconnect', async (req, res) => {
+router.post('/auth/google/disconnect', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const userId = req.user.userId;
 
     await calendarTokenService.deleteUserTokens(userId, 'google');
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting Google:', error);
+    logger.error('calendar', 'Error disconnecting Google', error.message);
     res.status(500).json({ error: 'Failed to disconnect' });
   }
 });
@@ -124,11 +125,12 @@ router.post('/auth/google/disconnect', async (req, res) => {
  * POST /api/auth/outlook/url
  * Obtenir l'URL d'authentification Outlook OAuth2
  */
-router.post('/auth/outlook/url', async (req, res) => {
+router.post('/auth/outlook/url', authMiddleware, async (req, res) => {
   try {
-    const { userId, userEmail, agency } = req.body;
+    const userId = req.user.userId;
+    const { userEmail, agency } = req.body;
 
-    if (!userId || !userEmail || !agency) {
+    if (!userEmail || !agency) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -136,7 +138,7 @@ router.post('/auth/outlook/url', async (req, res) => {
 
     res.json({ authUrl });
   } catch (error) {
-    console.error('Error generating Outlook auth URL:', error);
+    logger.error('calendar', 'Error generating Outlook auth URL', error.message);
     res.status(500).json({ error: 'Failed to generate Outlook auth URL' });
   }
 });
@@ -161,7 +163,7 @@ router.get('/auth/outlook/callback', async (req, res) => {
       userEmail = stateData.userEmail;
       agency = stateData.agency;
     } catch (stateError) {
-      console.error('Invalid Outlook OAuth state:', stateError.message);
+      logger.warn('calendar', 'Invalid Outlook OAuth state', stateError.message);
       return res.status(400).send('Invalid or expired OAuth state. Please try again.');
     }
 
@@ -174,7 +176,7 @@ router.get('/auth/outlook/callback', async (req, res) => {
     // Page de succès
     res.send(getSuccessPage('Outlook Calendar', '#0078D4'));
   } catch (error) {
-    console.error('Error in Outlook OAuth callback:', error);
+    logger.error('calendar', 'Error in Outlook OAuth callback', error.message);
     res.status(500).send(getErrorPage('Outlook Calendar'));
   }
 });
@@ -183,19 +185,15 @@ router.get('/auth/outlook/callback', async (req, res) => {
  * POST /api/auth/outlook/status
  * Vérifier si Outlook Calendar est connecté
  */
-router.post('/auth/outlook/status', async (req, res) => {
+router.post('/auth/outlook/status', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const userId = req.user.userId;
 
     const tokens = await calendarTokenService.getUserTokens(userId, 'outlook');
 
     res.json({ connected: !!tokens });
   } catch (error) {
-    console.error('Error checking Outlook connection status:', error);
+    logger.error('calendar', 'Error checking Outlook connection status', error.message);
     res.status(500).json({ error: 'Failed to check connection status' });
   }
 });
@@ -204,19 +202,15 @@ router.post('/auth/outlook/status', async (req, res) => {
  * POST /api/auth/outlook/disconnect
  * Déconnecter Outlook Calendar
  */
-router.post('/auth/outlook/disconnect', async (req, res) => {
+router.post('/auth/outlook/disconnect', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const userId = req.user.userId;
 
     await calendarTokenService.deleteUserTokens(userId, 'outlook');
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Error disconnecting Outlook:', error);
+    logger.error('calendar', 'Error disconnecting Outlook', error.message);
     res.status(500).json({ error: 'Failed to disconnect' });
   }
 });
@@ -229,19 +223,15 @@ router.post('/auth/outlook/disconnect', async (req, res) => {
  * POST /api/auth/calendar/status
  * Vérifier le statut de tous les calendriers connectés
  */
-router.post('/auth/calendar/status', async (req, res) => {
+router.post('/auth/calendar/status', authMiddleware, async (req, res) => {
   try {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' });
-    }
+    const userId = req.user.userId;
 
     const providers = await calendarTokenService.getConnectedProviders(userId);
 
     res.json(providers);
   } catch (error) {
-    console.error('Error checking calendar status:', error);
+    logger.error('calendar', 'Error checking calendar status', error.message);
     res.status(500).json({ error: 'Failed to check calendar status' });
   }
 });
@@ -267,8 +257,30 @@ router.post('/calendar/event', authMiddleware, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error creating Google event:', error);
+    logger.error('calendar', 'Error creating Google event', error.message);
     res.status(500).json({ error: 'Failed to create calendar event', message: error.message });
+  }
+});
+
+/**
+ * POST /api/calendar/event/update
+ * Mettre à jour un événement Google Calendar
+ */
+router.post('/calendar/event/update', authMiddleware, async (req, res) => {
+  try {
+    const { eventId, eventDetails } = req.body;
+    const userId = req.user.userId;
+
+    if (!userId || !eventId || !eventDetails) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await googleCalendarService.updateCalendarEvent(userId, eventId, eventDetails);
+
+    res.json(result);
+  } catch (error) {
+    logger.error('calendar', 'Error updating Google event', error.message);
+    res.status(500).json({ error: 'Failed to update calendar event', message: error.message });
   }
 });
 
@@ -289,7 +301,7 @@ router.post('/calendar/event/delete', authMiddleware, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error deleting Google event:', error);
+    logger.error('calendar', 'Error deleting Google event', error.message);
     res.status(500).json({ error: 'Failed to delete calendar event', message: error.message });
   }
 });
@@ -311,8 +323,30 @@ router.post('/calendar/outlook/event', authMiddleware, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('Error creating Outlook event:', error);
+    logger.error('calendar', 'Error creating Outlook event', error.message);
     res.status(500).json({ error: 'Failed to create Outlook calendar event', message: error.message });
+  }
+});
+
+/**
+ * POST /api/calendar/outlook/event/update
+ * Mettre à jour un événement Outlook Calendar
+ */
+router.post('/calendar/outlook/event/update', authMiddleware, async (req, res) => {
+  try {
+    const { eventId, eventDetails } = req.body;
+    const userId = req.user.userId;
+
+    if (!userId || !eventId || !eventDetails) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const result = await outlookCalendarService.updateCalendarEvent(userId, eventId, eventDetails);
+
+    res.json(result);
+  } catch (error) {
+    logger.error('calendar', 'Error updating Outlook event', error.message);
+    res.status(500).json({ error: 'Failed to update Outlook calendar event', message: error.message });
   }
 });
 
@@ -333,7 +367,7 @@ router.post('/calendar/outlook/event/delete', authMiddleware, async (req, res) =
 
     res.json(result);
   } catch (error) {
-    console.error('Error deleting Outlook event:', error);
+    logger.error('calendar', 'Error deleting Outlook event', error.message);
     res.status(500).json({ error: 'Failed to delete Outlook calendar event', message: error.message });
   }
 });
@@ -342,134 +376,26 @@ router.post('/calendar/outlook/event/delete', authMiddleware, async (req, res) =
 // HELPER FUNCTIONS - Success/Error Pages
 // =============================================================================
 
+const ALLOWED_SERVICES = ['Google Calendar', 'Outlook Calendar'];
+const ALLOWED_COLORS = { '#C5A065': 'black', '#0078D4': 'white' };
+
+function sanitizeServiceName(name) {
+  return ALLOWED_SERVICES.includes(name) ? name : 'Calendar';
+}
+
 function getSuccessPage(serviceName, accentColor) {
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Connexion réussie</title>
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background: #0F0F0F;
-          }
-          .container {
-            background: #1A1A1A;
-            padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-            text-align: center;
-            max-width: 400px;
-            border: 1px solid rgba(197, 160, 101, 0.2);
-          }
-          .success-icon {
-            width: 70px;
-            height: 70px;
-            background: linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 24px;
-            color: ${accentColor === '#0078D4' ? 'white' : 'black'};
-            font-size: 36px;
-            font-weight: bold;
-            box-shadow: 0 4px 20px ${accentColor}33;
-          }
-          h1 { color: #FFFFFF; margin: 0 0 12px; font-size: 26px; font-weight: bold; }
-          p { color: #9CA3AF; margin: 0 0 20px; line-height: 1.6; }
-          .highlight { color: ${accentColor}; font-weight: 600; }
-          .button {
-            background: linear-gradient(135deg, ${accentColor} 0%, ${accentColor}dd 100%);
-            color: ${accentColor === '#0078D4' ? 'white' : 'black'};
-            border: none;
-            padding: 14px 28px;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 12px ${accentColor}22;
-          }
-          .button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px ${accentColor}44;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="success-icon">✓</div>
-          <h1>Connexion réussie !</h1>
-          <p>Votre <span class="highlight">${serviceName}</span> a été connecté avec succès.</p>
-          <p style="font-size: 14px; color: #6B7280;">Cette fenêtre va se fermer automatiquement...</p>
-          <button class="button" onclick="window.close()">Fermer</button>
-        </div>
-        <script>
-          setTimeout(() => { window.close(); }, 3000);
-        </script>
-      </body>
-    </html>
-  `;
+  const safeName = sanitizeServiceName(serviceName);
+  const safeColor = Object.keys(ALLOWED_COLORS).includes(accentColor) ? accentColor : '#C5A065';
+  const iconColor = ALLOWED_COLORS[safeColor];
+  return successTemplate
+    .replace(/\{\{ACCENT_COLOR\}\}/g, safeColor)
+    .replace(/\{\{ICON_COLOR\}\}/g, iconColor)
+    .replace(/\{\{SERVICE_NAME\}\}/g, safeName);
 }
 
 function getErrorPage(serviceName) {
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Erreur de connexion</title>
-        <style>
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);
-          }
-          .container {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            text-align: center;
-            max-width: 400px;
-          }
-          .error-icon {
-            width: 60px;
-            height: 60px;
-            background: #ef4444;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px;
-            color: white;
-            font-size: 30px;
-          }
-          h1 { color: #1f2937; margin: 0 0 10px; font-size: 24px; }
-          p { color: #6b7280; margin: 0 0 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="error-icon">✕</div>
-          <h1>Erreur de connexion</h1>
-          <p>Une erreur s'est produite lors de la connexion à ${serviceName}.</p>
-          <p style="font-size: 14px;">Veuillez réessayer.</p>
-        </div>
-      </body>
-    </html>
-  `;
+  const safeName = sanitizeServiceName(serviceName);
+  return errorTemplate.replace(/\{\{SERVICE_NAME\}\}/g, safeName);
 }
 
 module.exports = router;

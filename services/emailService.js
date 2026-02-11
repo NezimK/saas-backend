@@ -1,11 +1,12 @@
 const { Resend } = require('resend');
+const logger = require('./logger');
 
 // Initialiser Resend
 let resend = null;
 if (process.env.RESEND_API_KEY) {
   resend = new Resend(process.env.RESEND_API_KEY);
 } else {
-  console.warn('RESEND_API_KEY non configure - les emails ne seront pas envoyes');
+  logger.warn('email', 'RESEND_API_KEY non configuré - les emails ne seront pas envoyés');
 }
 
 /**
@@ -13,7 +14,7 @@ if (process.env.RESEND_API_KEY) {
  */
 async function sendMagicLinkEmail(email, magicLink, companyName) {
   if (!resend) {
-    console.error('Resend non configure, impossible d\'envoyer l\'email');
+    logger.error('email', 'Resend non configuré, impossible d\'envoyer l\'email');
     return { success: false, error: 'Email service not configured' };
   }
 
@@ -50,7 +51,7 @@ async function sendMagicLinkEmail(email, magicLink, companyName) {
                 Bienvenue ${companyName} !
               </h2>
               <p style="color: #9ca3af; font-size: 16px; line-height: 1.6; margin: 0 0 25px;">
-                Votre compte IMMO Copilot a ete cree avec succes. Cliquez sur le bouton ci-dessous pour definir votre mot de passe et finaliser votre inscription.
+                Votre compte IMMO Copilot a été créé avec succès. Cliquez sur le bouton ci-dessous pour définir votre mot de passe et finaliser votre inscription.
               </p>
 
               <!-- CTA Button -->
@@ -65,7 +66,7 @@ async function sendMagicLinkEmail(email, magicLink, companyName) {
               </table>
 
               <p style="color: #6b7280; font-size: 14px; line-height: 1.6; margin: 20px 0 0;">
-                Ce lien est valable pendant <strong style="color: #9ca3af;">24 heures</strong>. Si vous n'avez pas demande cette inscription, ignorez simplement cet email.
+                Ce lien est valable pendant <strong style="color: #9ca3af;">24 heures</strong>. Si vous n'avez pas demandé cette inscription, ignorez simplement cet email.
               </p>
             </td>
           </tr>
@@ -93,7 +94,7 @@ async function sendMagicLinkEmail(email, magicLink, companyName) {
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2026 EMKAI - IMMO Copilot | Tous droits reserves
+                &copy; 2026 EMKAI - IMMO Copilot | Tous droits réservés
               </p>
             </td>
           </tr>
@@ -107,21 +108,21 @@ async function sendMagicLinkEmail(email, magicLink, companyName) {
     });
 
     if (error) {
-      console.error('Erreur envoi email Resend:', error);
+      logger.error('email', 'Erreur envoi email Resend', error.message);
       return { success: false, error: error.message };
     }
 
-    console.log(`Email magic link envoye a ${email} - ID: ${data.id}`);
+    logger.info('email', `Email magic link envoyé à ${email} - ID: ${data.id}`);
     return { success: true, id: data.id };
 
   } catch (error) {
-    console.error('Exception envoi email:', error);
+    logger.error('email', 'Exception envoi email', error.message);
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Envoie un email de bienvenue apres la configuration complete
+ * Envoie un email de bienvenue après la configuration complète
  */
 async function sendWelcomeEmail(email, companyName, dashboardUrl) {
   if (!resend) {
@@ -132,7 +133,7 @@ async function sendWelcomeEmail(email, companyName, dashboardUrl) {
     const { data, error } = await resend.emails.send({
       from: 'IMMO Copilot <noreply@emkai.fr>',
       to: email,
-      subject: 'Configuration terminee - Votre dashboard est pret !',
+      subject: 'Configuration terminée - Votre dashboard est prêt !',
       html: `
 <!DOCTYPE html>
 <html>
@@ -149,13 +150,13 @@ async function sendWelcomeEmail(email, companyName, dashboardUrl) {
               <h1 style="margin: 0 0 20px; font-size: 28px;">
                 <span style="color: #C5A065;">IMMO</span><span style="color: white;">Copilot</span>
               </h1>
-              <h2 style="color: white; margin: 0 0 15px;">Configuration terminee !</h2>
+              <h2 style="color: white; margin: 0 0 15px;">Configuration terminée !</h2>
               <p style="color: #9ca3af; font-size: 16px; line-height: 1.6;">
-                Felicitations ${companyName} ! Votre compte est maintenant entierement configure.
-                Vous pouvez acceder a votre dashboard pour commencer a gerer vos leads.
+                Félicitations ${companyName} ! Votre compte est maintenant entièrement configuré.
+                Vous pouvez accéder à votre dashboard pour commencer à gérer vos leads.
               </p>
               <a href="${dashboardUrl}" style="display: inline-block; margin-top: 25px; background: linear-gradient(135deg, #C5A065 0%, #B08F55 100%); color: #000000; text-decoration: none; padding: 16px 40px; border-radius: 10px; font-weight: 600;">
-                Acceder au dashboard
+                Accéder au dashboard
               </a>
             </td>
           </tr>
@@ -176,24 +177,24 @@ async function sendWelcomeEmail(email, companyName, dashboardUrl) {
     });
 
     if (error) {
-      console.error('Erreur envoi email welcome:', error);
+      logger.error('email', 'Erreur envoi email welcome', error.message);
       return { success: false, error: error.message };
     }
 
     return { success: true, id: data.id };
 
   } catch (error) {
-    console.error('Exception envoi email welcome:', error);
+    logger.error('email', 'Exception envoi email welcome', error.message);
     return { success: false, error: error.message };
   }
 }
 
 /**
- * Envoie un email de reinitialisation de mot de passe
+ * Envoie un email de réinitialisation de mot de passe
  */
 async function sendPasswordResetEmail(email, resetLink, userName = '') {
   if (!resend) {
-    console.error('Resend non configure, impossible d\'envoyer l\'email');
+    logger.error('email', 'Resend non configuré, impossible d\'envoyer l\'email');
     return { success: false, error: 'Email service not configured' };
   }
 
@@ -273,7 +274,7 @@ async function sendPasswordResetEmail(email, resetLink, userName = '') {
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2026 EMKAI - IMMO Copilot | Tous droits reserves
+                &copy; 2026 EMKAI - IMMO Copilot | Tous droits réservés
               </p>
             </td>
           </tr>
@@ -287,26 +288,26 @@ async function sendPasswordResetEmail(email, resetLink, userName = '') {
     });
 
     if (error) {
-      console.error('Erreur envoi email reset password:', error);
+      logger.error('email', 'Erreur envoi email reset password', error.message);
       return { success: false, error: error.message };
     }
 
-    console.log(`Email reset password envoye a ${email} - ID: ${data.id}`);
+    logger.info('email', `Email reset password envoyé à ${email} - ID: ${data.id}`);
     return { success: true, id: data.id };
 
   } catch (error) {
-    console.error('Exception envoi email reset password:', error);
+    logger.error('email', 'Exception envoi email reset password', error.message);
     return { success: false, error: error.message };
   }
 }
 
 /**
  * Envoie un email d'invitation a un nouvel utilisateur
- * L'utilisateur devra cliquer sur le lien pour definir son mot de passe
+ * L'utilisateur devra cliquer sur le lien pour définir son mot de passe
  */
 async function sendInvitationEmail(email, inviteLink, inviterName, companyName, userName = '') {
   if (!resend) {
-    console.error('Resend non configure, impossible d\'envoyer l\'email');
+    logger.error('email', 'Resend non configuré, impossible d\'envoyer l\'email');
     return { success: false, error: 'Email service not configured' };
   }
 
@@ -314,7 +315,7 @@ async function sendInvitationEmail(email, inviteLink, inviterName, companyName, 
     const { data, error } = await resend.emails.send({
       from: 'IMMO Copilot <noreply@emkai.fr>',
       to: email,
-      subject: `${inviterName} vous invite a rejoindre ${companyName} sur IMMO Copilot`,
+      subject: `${inviterName} vous invite à rejoindre ${companyName} sur IMMO Copilot`,
       html: `
 <!DOCTYPE html>
 <html>
@@ -340,13 +341,13 @@ async function sendInvitationEmail(email, inviteLink, inviterName, companyName, 
           <tr>
             <td style="padding: 20px 40px;">
               <h2 style="color: white; margin: 0 0 15px; font-size: 22px;">
-                ${userName ? `Bonjour ${userName} !` : 'Vous avez ete invite !'}
+                ${userName ? `Bonjour ${userName} !` : 'Vous avez été invité !'}
               </h2>
               <p style="color: #9ca3af; font-size: 16px; line-height: 1.6; margin: 0 0 25px;">
-                <strong style="color: #C5A065;">${inviterName}</strong> vous invite a rejoindre l'equipe <strong style="color: white;">${companyName}</strong> sur IMMO Copilot.
+                <strong style="color: #C5A065;">${inviterName}</strong> vous invite à rejoindre l'équipe <strong style="color: white;">${companyName}</strong> sur IMMO Copilot.
               </p>
               <p style="color: #9ca3af; font-size: 16px; line-height: 1.6; margin: 0 0 25px;">
-                Cliquez sur le bouton ci-dessous pour creer votre mot de passe et acceder a votre tableau de bord.
+                Cliquez sur le bouton ci-dessous pour créer votre mot de passe et accéder à votre tableau de bord.
               </p>
 
               <!-- CTA Button -->
@@ -389,7 +390,7 @@ async function sendInvitationEmail(email, inviteLink, inviterName, companyName, 
           <tr>
             <td style="padding: 20px 40px; background-color: #111111; border-radius: 0 0 16px 16px;">
               <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
-                &copy; 2026 EMKAI - IMMO Copilot | Tous droits reserves
+                &copy; 2026 EMKAI - IMMO Copilot | Tous droits réservés
               </p>
             </td>
           </tr>
@@ -403,15 +404,15 @@ async function sendInvitationEmail(email, inviteLink, inviterName, companyName, 
     });
 
     if (error) {
-      console.error('Erreur envoi email invitation:', error);
+      logger.error('email', 'Erreur envoi email invitation', error.message);
       return { success: false, error: error.message };
     }
 
-    console.log(`Email invitation envoye a ${email} - ID: ${data.id}`);
+    logger.info('email', `Email invitation envoyé à ${email} - ID: ${data.id}`);
     return { success: true, id: data.id };
 
   } catch (error) {
-    console.error('Exception envoi email invitation:', error);
+    logger.error('email', 'Exception envoi email invitation', error.message);
     return { success: false, error: error.message };
   }
 }

@@ -198,6 +198,26 @@
             text-decoration: underline;
         }
 
+        .resend-btn {
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            padding: 0;
+            font-family: inherit;
+        }
+
+        .resend-btn:hover {
+            text-decoration: underline;
+        }
+
+        .resend-btn:disabled {
+            color: var(--gray-500);
+            cursor: not-allowed;
+        }
+
         .edit-email-btn {
             background: transparent;
             border: 1px solid var(--gray-600);
@@ -360,7 +380,8 @@
 
         <p class="help-text">
             Vous n'avez pas recu l'email ? Verifiez vos spams ou
-            <a href="mailto:support@emkai.fr">contactez le support</a>.
+            <button class="resend-btn" onclick="resendEmail()">Renvoyer l'email</button>
+            ou <a href="mailto:support@emkai.fr">contactez le support</a>.
         </p>
 
         <div class="footer">
@@ -444,6 +465,50 @@
                     // Fermer le formulaire et afficher un message de succes
                     toggleEditEmail();
                     alert('Un email de connexion a ete envoye a ' + newEmail);
+                } else {
+                    alert(data.error || 'Erreur lors de l\'envoi. Veuillez reessayer.');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                alert('Erreur de connexion. Veuillez reessayer.');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function resendEmail() {
+            if (!sessionId) {
+                alert('Session de paiement non trouvee. Veuillez contacter le support.');
+                return;
+            }
+
+            if (!currentEmail) {
+                alert('Email non trouve. Veuillez utiliser "Modifier l\'email" pour specifier une adresse.');
+                return;
+            }
+
+            const btn = document.querySelector('.resend-btn');
+            const originalText = btn.textContent;
+            btn.textContent = 'Envoi...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/stripe/resend-magic-link', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        newEmail: currentEmail
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Email renvoye avec succes a ' + currentEmail);
                 } else {
                     alert(data.error || 'Erreur lors de l\'envoi. Veuillez reessayer.');
                 }

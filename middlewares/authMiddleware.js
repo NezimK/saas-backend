@@ -77,49 +77,73 @@ const requireRole = (...roles) => {
 };
 
 /**
- * Middleware optionnel d'authentification
- * Ne bloque pas si pas de token, mais attache l'utilisateur si présent
+ * Middleware de vérification du token d'onboarding
+ * Vérifie un JWT signé contenant purpose='onboarding' et tenantId
+ * Protège les endpoints post-paiement Stripe
  */
-const optionalAuth = (req, res, next) => {
+const verifyOnboardingToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next();
+    return res.status(401).json({ error: 'Token d\'onboarding manquant', code: 'NO_ONBOARDING_TOKEN' });
   }
 
   const token = authHeader.split(' ')[1];
 
   try {
     const decoded = authService.verifyAccessToken(token);
-    req.user = {
-      userId: decoded.userId,
-      tenantId: decoded.tenantId,
-      email: decoded.email,
-      role: decoded.role,
-      name: decoded.name
-    };
-  } catch (error) {
-    // Token invalide, on continue sans utilisateur
-  }
 
-  next();
+    // Accepter soit un token d'onboarding, soit un token d'auth normal (dashboard)
+    if (decoded.purpose === 'onboarding') {
+      req.onboardingTenantId = decoded.tenantId;
+    } else if (decoded.userId && decoded.tenantId) {
+      // Token d'auth dashboard — l'utilisateur est connecté
+      req.onboardingTenantId = decoded.tenantId;
+      req.user = {
+        userId: decoded.userId,
+        tenantId: decoded.tenantId,
+        email: decoded.email,
+        role: decoded.role
+      };
+    } else {
+      return res.status(403).json({ error: 'Token non valide pour l\'onboarding', code: 'INVALID_TOKEN_PURPOSE' });
+    }
+
+    const requestedTenantId = req.params.tenantId || req.body.tenantId || req.body.tenant_id;
+    if (requestedTenantId && requestedTenantId !== (decoded.tenantId)) {
+      return res.status(403).json({ error: 'Accès non autorisé à ce tenant', code: 'TENANT_MISMATCH' });
+    }
+
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expiré', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(401).json({ error: 'Token invalide', code: 'INVALID_TOKEN' });
+  }
 };
 
 /**
- * Vérifie que l'utilisateur a accès à un tenant spécifique
+ * Middleware de vérification d'API key interne (n8n → backend)
+ * Comparaison timing-safe pour éviter les attaques par timing
  */
-const verifyTenantAccess = (req, res, next) => {
-  const requestedTenantId = req.params.tenantId || req.body.tenantId || req.body.tenant_id;
+const verifyInternalApiKey = (req, res, next) => {
+  const apiKey = req.headers['x-internal-api-key'];
+  const crypto = require('crypto');
 
-  if (!requestedTenantId) {
-    return next();
+  if (!process.env.INTERNAL_API_KEY) {
+    return res.status(500).json({ error: 'Configuration serveur manquante' });
   }
 
-  if (req.user.tenantId !== requestedTenantId) {
-    return res.status(403).json({
-      error: 'Accès non autorisé à ce tenant',
-      code: 'TENANT_FORBIDDEN'
-    });
+  if (!apiKey) {
+    return res.status(401).json({ error: 'API key interne manquante', code: 'NO_INTERNAL_API_KEY' });
+  }
+
+  const expected = Buffer.from(process.env.INTERNAL_API_KEY, 'utf8');
+  const received = Buffer.from(String(apiKey), 'utf8');
+
+  if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) {
+    return res.status(401).json({ error: 'API key interne invalide', code: 'INVALID_INTERNAL_API_KEY' });
   }
 
   next();
@@ -128,6 +152,6 @@ const verifyTenantAccess = (req, res, next) => {
 module.exports = {
   authMiddleware,
   requireRole,
-  optionalAuth,
-  verifyTenantAccess
+  verifyOnboardingToken,
+  verifyInternalApiKey
 };
