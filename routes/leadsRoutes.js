@@ -25,21 +25,34 @@ async function fetchBienForLead(propertyReference, clientId) {
 
   const cleanRef = propertyReference.trim();
 
+  const selectFields = 'id, ref_externe, titre, adresse, code_postal, ville, type_bien, prix_vente, loyer, surface, nb_pieces, netty_id, apimo_id';
+
   // Chercher par ref_externe
   let { data, error } = await supabaseService.supabase
     .from('biens')
-    .select('id, ref_externe, titre, adresse, code_postal, ville, type_bien, prix_vente, loyer, surface, nb_pieces, netty_id')
+    .select(selectFields)
     .eq('client_id', clientId)
     .eq('ref_externe', cleanRef)
     .limit(1);
 
-  // Fallback : chercher par netty_id
+  // Fallback 1 : chercher par netty_id
   if (!error && (!data || data.length === 0)) {
     const result = await supabaseService.supabase
       .from('biens')
-      .select('id, ref_externe, titre, adresse, code_postal, ville, type_bien, prix_vente, loyer, surface, nb_pieces, netty_id')
+      .select(selectFields)
       .eq('client_id', clientId)
       .eq('netty_id', cleanRef)
+      .limit(1);
+    data = result.data;
+  }
+
+  // Fallback 2 : chercher par apimo_id
+  if (!error && (!data || data.length === 0)) {
+    const result = await supabaseService.supabase
+      .from('biens')
+      .select(selectFields)
+      .eq('client_id', clientId)
+      .eq('apimo_id', cleanRef)
       .limit(1);
     data = result.data;
   }
@@ -280,13 +293,15 @@ router.post('/:id/unassign', async (req, res) => {
       return res.status(500).json({ success: false, error: error1.message });
     }
 
-    // Étape 2 : Remettre le status à QUALIFIED via SQL brut (contourne trigger éventuel)
+    // Étape 2 : Remettre le status à QUALIFIED
     const { data: rpcResult, error: error2 } = await supabaseService.supabase
-      .rpc('exec_sql', {
-        sql_query: `UPDATE leads SET status = 'QUALIFIED' WHERE id = '${id}' AND client_id = '${req.user.tenantId}' RETURNING id, status;`
-      });
+      .from('leads')
+      .update({ status: 'QUALIFIED', updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('client_id', req.user.tenantId)
+      .select('id, status');
 
-    logger.info('leads', `[UNASSIGN] SQL brut result: ${JSON.stringify(rpcResult)}, error: ${JSON.stringify(error2)}`);
+    logger.info('leads', `[UNASSIGN] Update status result: ${JSON.stringify(rpcResult)}, error: ${JSON.stringify(error2)}`);
 
     if (error2) {
       logger.error('leads', `[UNASSIGN] Erreur étape 2 (status): ${error2.message}`);

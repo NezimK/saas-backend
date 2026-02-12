@@ -30,22 +30,28 @@ axios.get(`${process.env.N8N_API_URL}/workflows`, {
 .catch(err => logger.error('server', 'Erreur connexion n8n', err.response?.data || err.message));
 
 // Middleware
+const PROD_ORIGINS = [
+  'https://dashboard.emkai.fr',
+  'https://www.emkai.fr',
+  'https://emkai.fr',
+  process.env.DASHBOARD_URL,
+  process.env.FRONTEND_URL
+];
+
+const DEV_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'http://127.0.0.1:5500',
+  'http://localhost:5500',
+  'http://127.0.0.1:5501',
+  'http://localhost:5501',
+  /^http:\/\/192\.168\.\d+\.\d+:(5173|5174|5500|5501|3001)$/,
+];
+
 app.use(cors({
   origin: [
-    'http://localhost:5173',      // Dashboard dev (Vite)
-    'http://localhost:3001',      // Dashboard server
-    'http://127.0.0.1:5500',      // Live Server VSCode
-    'http://localhost:5500',      // Live Server VSCode (alt)
-    'http://127.0.0.1:5501',      // Live Server VSCode (autre port)
-    'http://localhost:5501',      // Live Server VSCode (autre port alt)
-    'https://dashboard.emkai.fr', // Dashboard prod
-    'https://www.emkai.fr',       // Site marketing
-    'http://www.emkai.fr',        // Site marketing HTTP
-    'https://emkai.fr',           // Site marketing sans www
-    'http://emkai.fr',            // Site marketing sans www HTTP
-    /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Réseau local (test mobile)
-    process.env.DASHBOARD_URL,    // URL configurable
-    process.env.FRONTEND_URL      // Site marketing configurable
+    ...PROD_ORIGINS,
+    ...(process.env.NODE_ENV === 'production' ? [] : DEV_ORIGINS)
   ].filter(Boolean),
   credentials: true
 }));
