@@ -226,6 +226,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               .update({
                 company_name: session.metadata.companyName,
                 responsable_name: session.metadata.responsableName || null,
+                agent_name: session.metadata.responsableName || null,
                 account_type: session.metadata.accountType,
                 plan: session.metadata.plan,
                 monthly_conversation_limit: planLimits.monthly_conversation_limit,
@@ -247,6 +248,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               email: session.customer_email.toLowerCase(),
               company_name: session.metadata.companyName,
               responsable_name: session.metadata.responsableName || null,
+              agent_name: session.metadata.responsableName || null,
               account_type: session.metadata.accountType,
               plan: session.metadata.plan,
               monthly_conversation_limit: planLimits.monthly_conversation_limit,
@@ -272,9 +274,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
             logger.info('stripe', `Utilisateur existant: ${user.id}`);
           } else {
             // Créer l'utilisateur manager SANS mot de passe
+            // Extraire prénom/nom depuis responsableName pour affichage dashboard
+            const nameParts = (session.metadata.responsableName || '').trim().split(/\s+/);
+            const firstName = nameParts[0] || session.metadata.companyName;
+            const lastName = nameParts.slice(1).join(' ') || null;
             user = await authService.createUserWithoutPassword(tenant.tenant_id, {
               email: session.customer_email,
-              companyName: session.metadata.companyName,
+              firstName,
+              lastName,
               role: 'manager'
             });
             logger.info('stripe', `Nouvel utilisateur créé : ${user.id}`);
@@ -919,6 +926,7 @@ router.post('/resend-magic-link', async (req, res) => {
           email: oldEmail,
           company_name: session.metadata?.companyName || 'Mon agence',
           responsable_name: session.metadata?.responsableName || null,
+          agent_name: session.metadata?.responsableName || null,
           account_type: session.metadata?.accountType || 'agency',
           plan: session.metadata?.plan || 'essentiel',
           monthly_conversation_limit: planLimits.monthly_conversation_limit,
@@ -931,9 +939,13 @@ router.post('/resend-magic-link', async (req, res) => {
       }
 
       // Créer l'utilisateur
+      const resendNameParts = (session.metadata?.responsableName || '').trim().split(/\s+/);
+      const resendFirstName = resendNameParts[0] || session.metadata?.companyName || 'Mon agence';
+      const resendLastName = resendNameParts.slice(1).join(' ') || null;
       user = await authService.createUserWithoutPassword(tenant.tenant_id, {
         email: oldEmail,
-        companyName: session.metadata?.companyName || 'Mon agence',
+        firstName: resendFirstName,
+        lastName: resendLastName,
         role: 'manager'
       });
       logger.info('stripe', `Utilisateur cree depuis resend: ${user.id}`);
@@ -1013,7 +1025,7 @@ router.post('/resend-magic-link', async (req, res) => {
     logger.error('stripe', 'Erreur resend-magic-link', error.message, error.stack);
     res.status(500).json({
       success: false,
-      error: error.message || 'Erreur lors du renvoi de l\'email'
+      error: 'Erreur serveur'
     });
   }
 });

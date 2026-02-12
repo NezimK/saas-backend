@@ -31,7 +31,7 @@ axios.get(`${process.env.N8N_API_URL}/workflows`, {
 
 // Middleware
 const PROD_ORIGINS = [
-  'https://dashboard.emkai.fr',
+  'https://immocopilot.emkai.fr',
   'https://www.emkai.fr',
   'https://emkai.fr',
   process.env.DASHBOARD_URL,
@@ -62,7 +62,7 @@ app.use((req, res, next) => {
   if (req.originalUrl === '/api/stripe/webhook') {
     next(); // Skip express.json() for Stripe webhook
   } else {
-    express.json()(req, res, next);
+    express.json({ limit: '10kb' })(req, res, next);
   }
 });
 
@@ -91,6 +91,8 @@ const generalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, message: { err
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
+app.use('/api/auth/set-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
 app.use('/api/onboarding', onboardingLimiter);
 app.use('/api/chat', chatLimiter);
 app.use('/api', generalLimiter);
@@ -113,7 +115,42 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Backend SaaS opérationnel' });
 });
 
+// Catch-all 404 (après toutes les routes)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not Found' });
+});
+
+// Global error handler (doit être le dernier middleware)
+app.use((err, req, res, next) => {
+  logger.error('server', `Unhandled error on ${req.method} ${req.originalUrl}`, err.message);
+  res.status(err.statusCode || 500).json({
+    success: false,
+    error: process.env.NODE_ENV === 'production' ? 'Erreur serveur' : err.message
+  });
+});
+
 // Démarrage du serveur
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info('server', `Serveur demarre sur http://localhost:${PORT}`);
+});
+
+// Graceful shutdown
+const shutdown = (signal) => {
+  logger.info('server', `${signal} reçu, arrêt en cours...`);
+  server.close(() => {
+    logger.info('server', 'Serveur arrêté proprement');
+    process.exit(0);
+  });
+  // Forcer l'arrêt après 10s si le serveur ne se ferme pas
+  setTimeout(() => process.exit(1), 10000);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('uncaughtException', (err) => {
+  logger.error('server', 'Uncaught exception', err.message);
+  shutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('server', 'Unhandled rejection', String(reason));
+  shutdown('unhandledRejection');
 });

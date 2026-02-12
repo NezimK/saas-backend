@@ -83,7 +83,7 @@ router.get('/', async (req, res) => {
 
     if (error) {
       logger.error('leads', 'Erreur recuperation leads', error.message);
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Enrichir chaque lead avec les détails du bien
@@ -188,7 +188,7 @@ router.put('/:id', async (req, res) => {
 
     if (error) {
       logger.error('leads', 'Erreur mise a jour lead', error.message);
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     res.json({ success: true, lead: data });
@@ -290,7 +290,7 @@ router.post('/:id/unassign', async (req, res) => {
 
     if (error1) {
       logger.error('leads', `[UNASSIGN] Erreur étape 1: ${error1.message}`);
-      return res.status(500).json({ success: false, error: error1.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Étape 2 : Remettre le status à QUALIFIED
@@ -316,7 +316,7 @@ router.post('/:id/unassign', async (req, res) => {
       .single();
 
     if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     logger.info('leads', `[UNASSIGN] Lead ${id} désassigné, status=${data.status}, assigned_agent=${data.assigned_agent}`);
@@ -348,7 +348,7 @@ router.post('/:id/toggle-ai', async (req, res) => {
       .single();
 
     if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     if (!data) {
@@ -378,7 +378,7 @@ router.get('/stats/summary', requireRole('manager', 'admin'), async (req, res) =
       .eq('client_id', req.user.tenantId);
 
     if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Calculer les statistiques

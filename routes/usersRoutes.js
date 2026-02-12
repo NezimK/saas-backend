@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 
     if (error) {
       logger.error('users', 'Erreur récupération utilisateurs', error.message);
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Formater les utilisateurs pour le dashboard
@@ -76,7 +76,7 @@ router.get('/agents', async (req, res) => {
       .order('first_name');
 
     if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     const agents = data.map(user => ({
@@ -204,7 +204,7 @@ router.post('/', requireRole('manager', 'admin'), async (req, res) => {
     });
   } catch (error) {
     logger.error('users', 'Erreur POST /api/users', error.message);
-    res.status(500).json({ success: false, error: error.message || 'Erreur serveur' });
+    res.status(500).json({ success: false, error: 'Erreur serveur' });
   }
 });
 
@@ -303,7 +303,7 @@ router.put('/:id', async (req, res) => {
 
     if (error) {
       logger.error('users', 'Erreur mise à jour utilisateur', error.message);
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     res.json({
@@ -363,7 +363,7 @@ router.delete('/:id', requireRole('manager', 'admin'), async (req, res) => {
       .eq('tenant_id', req.user.tenantId);
 
     if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Révoquer tous ses tokens
@@ -428,7 +428,7 @@ router.post('/me/update-email', async (req, res) => {
 
     if (error) {
       logger.error('users', 'Erreur update email', error.message);
-      return res.status(500).json({ success: false, error: error.message });
+      return res.status(500).json({ success: false, error: 'Erreur serveur' });
     }
 
     // Mettre à jour l'email dans la table tenants si c'est l'admin/owner du tenant
@@ -489,10 +489,12 @@ router.post('/:id/reset-password', requireRole('manager', 'admin'), async (req, 
     const temporaryPassword = authService.generateTemporaryPassword();
     await authService.updatePassword(id, temporaryPassword);
 
+    // Ne pas renvoyer le mot de passe en clair dans la réponse API
+    // Le manager doit communiquer le mot de passe au collaborateur de manière sécurisée
     res.json({
       success: true,
-      temporaryPassword,
-      message: `Mot de passe réinitialisé pour ${targetUser.email}`
+      temporaryPassword: temporaryPassword.slice(0, 2) + '••••••••' + temporaryPassword.slice(-2),
+      message: `Mot de passe réinitialisé pour ${targetUser.email}. Communiquez-le de manière sécurisée.`
     });
   } catch (error) {
     logger.error('users', 'Erreur POST /api/users/:id/reset-password', error.message);

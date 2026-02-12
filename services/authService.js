@@ -87,7 +87,7 @@ class AuthService {
   async validateUser(email, password) {
     const { data: user, error } = await supabaseService.supabase
       .from('users')
-      .select('*, tenants(company_name)')
+      .select('*, tenants(company_name, agent_name)')
       .eq('email', email.toLowerCase())
       .eq('is_active', true)
       .single();
@@ -224,7 +224,7 @@ class AuthService {
   async getUserById(userId) {
     const { data, error } = await supabaseService.supabase
       .from('users')
-      .select('*, tenants(company_name)')
+      .select('*, tenants(company_name, agent_name)')
       .eq('id', userId)
       .eq('is_active', true)
       .single();
@@ -345,10 +345,15 @@ class AuthService {
    * Formate un objet user pour la réponse API
    */
   formatUserResponse(user) {
+    // Pour les managers, utiliser agent_name du tenant (= Nom Prénom saisi au checkout)
+    const agentName = user.tenants?.agent_name;
+    const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+    const displayName = agentName || fullName || user.email;
+
     return {
       id: user.id,
       email: user.email,
-      name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email,
+      name: displayName,
       firstName: user.first_name,
       lastName: user.last_name,
       role: user.role,

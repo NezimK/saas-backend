@@ -258,7 +258,7 @@ router.post('/calendar/event', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error creating Google event', error.message);
-    res.status(500).json({ error: 'Failed to create calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -280,7 +280,7 @@ router.post('/calendar/event/update', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error updating Google event', error.message);
-    res.status(500).json({ error: 'Failed to update calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -302,7 +302,7 @@ router.post('/calendar/event/delete', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error deleting Google event', error.message);
-    res.status(500).json({ error: 'Failed to delete calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -324,7 +324,7 @@ router.post('/calendar/outlook/event', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error creating Outlook event', error.message);
-    res.status(500).json({ error: 'Failed to create Outlook calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -346,7 +346,7 @@ router.post('/calendar/outlook/event/update', authMiddleware, async (req, res) =
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error updating Outlook event', error.message);
-    res.status(500).json({ error: 'Failed to update Outlook calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -368,7 +368,7 @@ router.post('/calendar/outlook/event/delete', authMiddleware, async (req, res) =
     res.json(result);
   } catch (error) {
     logger.error('calendar', 'Error deleting Outlook event', error.message);
-    res.status(500).json({ error: 'Failed to delete Outlook calendar event', message: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

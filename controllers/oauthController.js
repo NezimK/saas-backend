@@ -7,7 +7,8 @@ const workflowService = require('../services/workflowService');
 const n8nService = require('../services/n8nService');
 const logger = require('../services/logger');
 
-const STATE_SECRET = process.env.STATE_SECRET || 'emkai-oauth-state-secret';
+const STATE_SECRET = process.env.STATE_SECRET;
+if (!STATE_SECRET) throw new Error('FATAL: STATE_SECRET environment variable is required');
 
 class OAuthController {
   // ================== MSAL Helpers pour Outlook ==================
@@ -49,8 +50,8 @@ class OAuthController {
       throw new Error('Invalid state signature');
     }
     const data = JSON.parse(decoded.payload);
-    // Vérifier expiration (10 minutes)
-    if (Date.now() - data.timestamp > 10 * 60 * 1000) {
+    // Vérifier expiration (5 minutes)
+    if (Date.now() - data.timestamp > 5 * 60 * 1000) {
       throw new Error('State expired');
     }
     return data;

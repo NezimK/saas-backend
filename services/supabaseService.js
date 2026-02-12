@@ -46,23 +46,6 @@ class SupabaseService {
     return data;
   }
 
-  /**
-   * Exécute du SQL brut via Supabase (pour créer schémas, etc.)
-   */
-  async executeRawSQL(sql) {
-    const logger = require('./logger');
-    logger.debug('supabase', `executeRawSQL: ${sql.length} chars`);
-
-    const { data, error } = await this.supabase.rpc('exec_sql', { sql_query: sql });
-
-    if (error) {
-      logger.error('supabase', 'executeRawSQL erreur RPC', error);
-      throw new Error(`Erreur SQL: ${error.message}`);
-    }
-
-    logger.debug('supabase', 'executeRawSQL résultat OK');
-    return data;
-  }
 }
 
 // ⚠️ IMPORTANT : Exporter une INSTANCE

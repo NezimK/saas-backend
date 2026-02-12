@@ -231,6 +231,12 @@
             color: white;
         }
 
+        .logiciel-choice.active {
+            border-color: var(--accent);
+            background: rgba(197, 160, 101, 0.1);
+            color: var(--accent);
+        }
+
         .error {
             background: rgba(239, 68, 68, 0.1);
             color: #f87171;
@@ -442,7 +448,7 @@
                 Configurez votre compte IMMO Copilot.
             </p>
 
-            <!-- Indicateur d'etapes (3 etapes: Netty, Portails, Email) -->
+            <!-- Indicateur d'etapes (3 etapes: Logiciel, Portails, Email) -->
             <div class="step-indicator">
                 <div class="step-dot" id="dot1"></div>
                 <div class="step-dot" id="dot2"></div>
@@ -452,46 +458,117 @@
             <div id="error" class="error"></div>
             <div id="success" class="success"></div>
 
-            <!-- Etape 1: Netty API -->
-            <div id="nettyStep">
-                <p class="subtitle" style="margin-bottom: 20px;">Connectez votre logiciel Netty</p>
+            <!-- Etape 1: Choix du logiciel + Configuration API -->
+            <div id="logicielStep">
+                <p class="subtitle" style="margin-bottom: 20px;">Quel logiciel immobilier utilisez-vous ?</p>
 
-                <div class="info-box">
-                    <h3>Comment recuperer votre clée API Netty ?</h3>
-                    <ol>
-                        <li><strong>Allez dans Netty :</strong> Parametres → Configuration → Gestion des clées API</li>
-                        <li><strong>Cliquez sur "+ NOUVEAU"</strong></li>
-                        <li><strong>Remplir le formulaire :</strong>
-                            <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
-                                <li>Nom de l'accès API : "IMMO Copilot"</li>
-                                <li>Clé associée à des : Données Réelles</li>
-                                <li>Active : Oui</li>
-                                <li>IP autorisees : <code>51.178.42.123</code></li>
-                            </ul>
-                        </li>
-                        <li><strong>Copiez la clée API</strong> generee et collez-la ci-dessous</li>
-                    </ol>
-                    <p style="margin-top: 15px;">
-                        <a href="https://aide.netty.fr/gestion-cles-api-modelo-office" target="_blank">
-                            Voir le guide visuel complet
-                        </a>
-                    </p>
+                <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+                    <button class="btn btn-secondary logiciel-choice active" id="choiceNetty" onclick="selectLogiciel('netty')" style="flex: 1; padding: 16px; text-align: center;">
+                        <strong>Septeo</strong>
+                    </button>
+                    <button class="btn btn-secondary logiciel-choice" id="choiceApimo" onclick="selectLogiciel('apimo')" style="flex: 1; padding: 16px; text-align: center;">
+                        <strong>Apimo</strong>
+                    </button>
                 </div>
 
-                <div class="input-group">
-                    <label for="apiKeyInput">Votre clée API Netty</label>
-                    <input type="text" id="apiKeyInput" placeholder="Collez votre clée API ici"
-                        onkeypress="if(event.key === 'Enter') validateNettyAPI()">
-                    <div class="help-text">Cette clée permet à IMMO Copilot de synchroniser vos biens automatiquement
+                <!-- Formulaire Netty -->
+                <div id="nettyForm">
+                    <div class="info-box">
+                        <h3>Comment recuperer votre cle API Septeo ?</h3>
+                        <ol>
+                            <li><strong>Allez dans Septeo :</strong> Parametres → Configuration → Gestion des cles API</li>
+                            <li><strong>Cliquez sur "+ NOUVEAU"</strong></li>
+                            <li><strong>Remplir le formulaire :</strong>
+                                <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
+                                    <li>Nom de l'accès API : "IMMO Copilot"</li>
+                                    <li>Clé associée à des : Données Réelles</li>
+                                    <li>Active : Oui</li>
+                                    <li>IP autorisees : <code>51.178.42.123</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>Copiez la cle API</strong> generee et collez-la ci-dessous</li>
+                        </ol>
+                        <p style="margin-top: 15px;">
+                            <a href="https://aide.netty.fr/gestion-cles-api-modelo-office" target="_blank">
+                                Voir le guide visuel complet
+                            </a>
+                        </p>
                     </div>
-                    <p class="help-text" style="margin-top: 12px; color: var(--gray-400);">
-                        Vous ne trouvez pas votre clée API ? Contactez le support de votre CRM.
-                    </p>
+
+                    <div class="input-group">
+                        <label for="apiKeyInput">Votre cle API Septeo</label>
+                        <input type="text" id="apiKeyInput" placeholder="Collez votre cle API ici"
+                            onkeypress="if(event.key === 'Enter') validateNettyAPI()">
+                        <div class="help-text">Cette cle permet a IMMO Copilot de synchroniser vos biens automatiquement
+                        </div>
+                        <p class="help-text" style="margin-top: 12px; color: var(--gray-400);">
+                            Vous ne trouvez pas votre cle API ? Contactez le support de votre CRM.
+                        </p>
+                    </div>
+
+                    <button class="btn btn-primary" id="validateNettyBtn" onclick="validateNettyAPI()">
+                        Valider et continuer
+                    </button>
                 </div>
 
-                <button class="btn btn-primary" id="validateNettyBtn" onclick="validateNettyAPI()">
-                    Valider et continuer
-                </button>
+                <!-- Formulaire Apimo -->
+                <div id="apimoForm" style="display: none;">
+                    <div class="info-box">
+                        <h3>Comment obtenir vos identifiants API Apimo ?</h3>
+                        <ol>
+                            <li><strong>Contactez le support Apimo</strong> pour demander un acces API :
+                                <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
+                                    <li>Par telephone : <code>+33 (0)4 92 91 90 63</code></li>
+                                    <li>Par email via le <a href="https://apimo.net/en/contact" target="_blank">formulaire de contact Apimo</a></li>
+                                    <li>Par WhatsApp : <code>+33 4 92 91 90 63</code></li>
+                                </ul>
+                            </li>
+                            <li><strong>Demandez un acces "Webservice API"</strong> en precisant que vous souhaitez connecter votre compte a IMMO Copilot</li>
+                            <li><strong>Vous recevrez 3 informations :</strong>
+                                <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
+                                    <li><strong>Provider ID</strong> — identifiant numerique (ex: <code>1234</code>)</li>
+                                    <li><strong>Token</strong> — cle d'authentification (longue chaine de caracteres)</li>
+                                    <li><strong>Agency ID</strong> — identifiant de votre agence (ex: <code>56789</code>)</li>
+                                </ul>
+                            </li>
+                            <li><strong>Saisissez ces 3 informations</strong> dans les champs ci-dessous</li>
+                        </ol>
+                        <p style="margin-top: 15px;">
+                            <a href="https://apimo.net/en/api/" target="_blank">
+                                En savoir plus sur l'API Apimo
+                            </a>
+                        </p>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="apimoProviderInput">Provider ID</label>
+                        <input type="text" id="apimoProviderInput" placeholder="Ex: 1234"
+                            onkeypress="if(event.key === 'Enter') document.getElementById('apimoTokenInput').focus()">
+                        <div class="help-text">Identifiant numerique fourni par Apimo</div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="apimoTokenInput">Token</label>
+                        <input type="text" id="apimoTokenInput" placeholder="Collez votre token ici"
+                            onkeypress="if(event.key === 'Enter') document.getElementById('apimoAgencyInput').focus()">
+                        <div class="help-text">Cle d'authentification fournie par Apimo</div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="apimoAgencyInput">Agency ID</label>
+                        <input type="text" id="apimoAgencyInput" placeholder="Ex: 56789"
+                            onkeypress="if(event.key === 'Enter') validateApimoAPI()">
+                        <div class="help-text">Identifiant de votre agence dans Apimo</div>
+                    </div>
+
+                    <p class="help-text" style="margin-bottom: 20px; color: var(--gray-400);">
+                        Vous n'avez pas encore vos identifiants ? Contactez le support Apimo au <strong style="color: var(--gray-300);">04 92 91 90 63</strong>
+                    </p>
+
+                    <button class="btn btn-primary" id="validateApimoBtn" onclick="validateApimoAPI()">
+                        Valider et continuer
+                    </button>
+                </div>
             </div>
 
             <!-- Etape 2: Selection des portails -->
@@ -688,7 +765,7 @@
                 mainContent.style.display = 'block';
 
                 // Cacher toutes les etapes
-                document.getElementById('nettyStep').style.display = 'none';
+                document.getElementById('logicielStep').style.display = 'none';
                 document.getElementById('portalsStep').style.display = 'none';
                 document.getElementById('gmailStep').style.display = 'none';
 
@@ -720,7 +797,7 @@
             const apiKey = apiKeyInput.value.trim();
 
             if (!apiKey) {
-                showError('Veuillez entrer votre clée API Netty');
+                showError('Veuillez entrer votre cle API Septeo');
                 return;
             }
 
@@ -746,16 +823,78 @@
                     throw new Error(data.error || 'Erreur lors de la validation de la clée API');
                 }
 
-                showSuccess('Clée API Netty validée avec succès !');
+                showSuccess('Cle API Septeo validee avec succes !');
 
                 // Passer a l'etape portails apres 1 seconde
                 setTimeout(() => {
-                    document.getElementById('nettyStep').style.display = 'none';
+                    document.getElementById('logicielStep').style.display = 'none';
                     document.getElementById('portalsStep').style.display = 'block';
                     currentStep = 2;
                     updateStepIndicator();
                     renderPortals([]);
                     // Scroll vers le haut de l'etape
+                    document.getElementById('portalsStep').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 1000);
+
+            } catch (error) {
+                showError(error.message);
+                btn.disabled = false;
+                btn.textContent = 'Valider et continuer';
+            }
+        }
+
+        // Selectionner le logiciel (Netty ou Apimo)
+        let selectedLogiciel = 'netty';
+        function selectLogiciel(logiciel) {
+            selectedLogiciel = logiciel;
+            document.getElementById('nettyForm').style.display = logiciel === 'netty' ? 'block' : 'none';
+            document.getElementById('apimoForm').style.display = logiciel === 'apimo' ? 'block' : 'none';
+            document.getElementById('choiceNetty').classList.toggle('active', logiciel === 'netty');
+            document.getElementById('choiceApimo').classList.toggle('active', logiciel === 'apimo');
+        }
+
+        // Valider les credentials API Apimo
+        async function validateApimoAPI() {
+            const providerId = document.getElementById('apimoProviderInput').value.trim();
+            const token = document.getElementById('apimoTokenInput').value.trim();
+            const agencyId = document.getElementById('apimoAgencyInput').value.trim();
+
+            if (!providerId || !token || !agencyId) {
+                showError('Veuillez remplir les 3 champs (Provider ID, Token, Agency ID)');
+                return;
+            }
+
+            if (!tenantId) {
+                showError('Erreur: tenant non initialise');
+                return;
+            }
+
+            const btn = document.getElementById('validateApimoBtn');
+            btn.disabled = true;
+            btn.textContent = 'Validation en cours...';
+
+            try {
+                const response = await fetch('/api/onboarding/validate-apimo-api', {
+                    method: 'POST',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ tenantId, providerId, token, agencyId })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Erreur lors de la validation des credentials');
+                }
+
+                showSuccess('Credentials API Apimo validees avec succes !');
+
+                // Passer a l'etape portails apres 1 seconde
+                setTimeout(() => {
+                    document.getElementById('logicielStep').style.display = 'none';
+                    document.getElementById('portalsStep').style.display = 'block';
+                    currentStep = 2;
+                    updateStepIndicator();
+                    renderPortals([]);
                     document.getElementById('portalsStep').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 1000);
 

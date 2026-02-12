@@ -28,7 +28,7 @@ router.get('/gmail/:tenantId', authMiddleware, async (req, res) => {
     logger.error('token', 'Erreur recuperation token', error.message);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Erreur serveur'
     });
   }
 });
@@ -58,7 +58,7 @@ router.post('/gmail/:tenantId/refresh', authMiddleware, async (req, res) => {
     logger.error('token', 'Erreur refresh token', error.message);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: 'Erreur serveur'
     });
   }
 });

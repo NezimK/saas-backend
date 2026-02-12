@@ -95,7 +95,7 @@ router.post('/get-or-create-tenant', async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur get-or-create-tenant', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -143,7 +143,7 @@ router.post('/update-account-info', verifyOnboardingToken, async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur update-account-info', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -208,7 +208,7 @@ router.post('/update-filters', verifyOnboardingToken, async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur update-filters', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -295,7 +295,7 @@ router.get('/filters/:tenantId', verifyOnboardingToken, async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur get-filters', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -348,7 +348,7 @@ router.post('/complete', verifyOnboardingToken, async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur complete', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -430,7 +430,7 @@ router.post('/whatsapp-number', verifyOnboardingToken, async (req, res) => {
 
   } catch (error) {
     logger.error('onboarding', 'Erreur whatsapp-number', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -515,13 +515,111 @@ router.post('/validate-netty-api', verifyOnboardingToken, async (req, res) => {
       }
 
       return res.status(500).json({
-        error: 'Erreur lors de la validation de la clé API : ' + (apiError.message || 'Erreur inconnue')
+        error: 'Erreur lors de la validation de la clé API'
       });
     }
 
   } catch (error) {
     logger.error('onboarding', 'Erreur validate-netty-api', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+/**
+ * POST /api/onboarding/validate-apimo-api
+ * Valide les credentials API Apimo et les sauvegarde
+ */
+router.post('/validate-apimo-api', verifyOnboardingToken, async (req, res) => {
+  try {
+    const { tenantId, providerId, token, agencyId } = req.body;
+
+    if (!tenantId || !providerId || !token || !agencyId) {
+      return res.status(400).json({ error: 'tenantId, providerId, token et agencyId requis' });
+    }
+
+    logger.info('onboarding', `Validation credentials API Apimo pour tenant : ${tenantId}`);
+
+    // Tester les credentials en appelant l'API Apimo
+    try {
+      const credentials = Buffer.from(`${providerId}:${token}`).toString('base64');
+      const testResponse = await axios.get(`https://api.apimo.pro/agencies/${agencyId}/properties`, {
+        headers: {
+          'Authorization': `Basic ${credentials}`
+        },
+        params: {
+          limit: 1
+        },
+        timeout: 10000
+      });
+
+      if (testResponse.status === 200) {
+        logger.info('onboarding', 'Credentials API Apimo valides');
+
+        // Sauvegarder les credentials dans Supabase
+        const apiKeyJson = JSON.stringify({ provider_id: providerId, token, agency_id: agencyId });
+        const { error: updateError } = await supabaseService.supabase
+          .from('tenants')
+          .update({
+            logiciel: 'apimo',
+            api_key: apiKeyJson,
+            api_status: 'active',
+            api_last_sync: null
+          })
+          .eq('tenant_id', tenantId);
+
+        if (updateError) {
+          logger.error('onboarding', 'Erreur sauvegarde credentials Apimo', updateError.message);
+          return res.status(500).json({ error: 'Erreur lors de la sauvegarde des credentials' });
+        }
+
+        logger.info('onboarding', `Credentials Apimo sauvegardees pour ${tenantId}`);
+
+        // Déclencher la synchronisation Apimo via n8n
+        try {
+          logger.info('onboarding', `Déclenchement sync Apimo pour ${tenantId}...`);
+          await axios.post('https://n8n.emkai.fr/webhook/sync-apimo-single', {
+            tenant_id: tenantId
+          }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 5000
+          });
+          logger.info('onboarding', `Sync Apimo declenche pour ${tenantId}`);
+        } catch (syncError) {
+          logger.error('onboarding', 'Erreur déclenchement sync Apimo', syncError.message);
+        }
+
+        const propertiesCount = testResponse.data?.properties?.length || testResponse.data?.length || 0;
+
+        return res.json({
+          success: true,
+          message: 'Credentials API Apimo validées et sauvegardées',
+          productsCount: propertiesCount
+        });
+      }
+
+    } catch (apiError) {
+      logger.error('onboarding', `Erreur validation API Apimo: ${apiError.response?.status}`, apiError.response?.data);
+
+      if (apiError.response?.status === 401 || apiError.response?.status === 403) {
+        return res.status(401).json({
+          error: 'Credentials invalides. Vérifiez votre Provider ID, Token et Agency ID Apimo.'
+        });
+      }
+
+      if (apiError.code === 'ECONNABORTED' || apiError.code === 'ETIMEDOUT') {
+        return res.status(408).json({
+          error: 'Timeout : impossible de contacter l\'API Apimo.'
+        });
+      }
+
+      return res.status(500).json({
+        error: 'Erreur lors de la validation des credentials'
+      });
+    }
+
+  } catch (error) {
+    logger.error('onboarding', 'Erreur validate-apimo-api', error.message);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -564,7 +662,7 @@ router.post('/save-notification-settings', verifyOnboardingToken, async (req, re
 
   } catch (error) {
     logger.error('onboarding', 'Erreur save-notification-settings', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -583,7 +681,7 @@ router.get('/whatsapp-pool', authMiddleware, requireRole('admin'), async (req, r
     res.json(status);
   } catch (error) {
     logger.error('onboarding', 'Erreur whatsapp-pool', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -608,7 +706,7 @@ router.post('/whatsapp-pool/add', authMiddleware, requireRole('admin'), async (r
     res.json(result);
   } catch (error) {
     logger.error('onboarding', 'Erreur whatsapp-pool/add', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -633,7 +731,7 @@ router.post('/whatsapp-pool/release', authMiddleware, requireRole('admin'), asyn
     res.json(result);
   } catch (error) {
     logger.error('onboarding', 'Erreur whatsapp-pool/release', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

@@ -13,6 +13,27 @@ const { authMiddleware } = require('../middlewares/authMiddleware');
 const logger = require('../services/logger');
 
 /**
+ * Valide la complexité du mot de passe
+ * @param {string} password
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validatePasswordStrength(password) {
+  if (password.length < 8) {
+    return { valid: false, error: 'Le mot de passe doit faire au moins 8 caractères' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: 'Le mot de passe doit contenir au moins une majuscule' };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, error: 'Le mot de passe doit contenir au moins un chiffre' };
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return { valid: false, error: 'Le mot de passe doit contenir au moins un caractère spécial' };
+  }
+  return { valid: true };
+}
+
+/**
  * POST /api/auth/login
  * Authentifie un utilisateur et retourne les tokens
  */
@@ -164,10 +185,11 @@ router.post('/change-password', authMiddleware, async (req, res) => {
       });
     }
 
-    if (newPassword.length < 8) {
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) {
       return res.status(400).json({
         success: false,
-        error: 'Le nouveau mot de passe doit faire au moins 8 caractères'
+        error: pwCheck.error
       });
     }
 
@@ -262,10 +284,11 @@ router.post('/set-password', async (req, res) => {
     }
 
     // Validation du mot de passe
-    if (password.length < 8) {
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid) {
       return res.status(400).json({
         success: false,
-        error: 'Le mot de passe doit faire au moins 8 caractères'
+        error: pwCheck.error
       });
     }
 
@@ -278,13 +301,13 @@ router.post('/set-password', async (req, res) => {
       });
     }
 
-    // Définir le mot de passe
-    await authService.setInitialPassword(userId, password);
-
-    // Marquer le magic link comme utilisé APRÈS la création du mot de passe
+    // Marquer le magic link comme utilisé AVANT de set le password (évite race condition)
     if (magicLinkToken) {
       await magicLinkService.markMagicLinkAsUsed(magicLinkToken);
     }
+
+    // Définir le mot de passe
+    await authService.setInitialPassword(userId, password);
 
     // Récupérer l'utilisateur complet
     const user = await authService.getUserById(userId);
@@ -402,10 +425,11 @@ router.post('/reset-password', async (req, res) => {
     }
 
     // Validation du mot de passe
-    if (password.length < 8) {
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid) {
       return res.status(400).json({
         success: false,
-        error: 'Le mot de passe doit faire au moins 8 caractères'
+        error: pwCheck.error
       });
     }
 
@@ -418,11 +442,11 @@ router.post('/reset-password', async (req, res) => {
       });
     }
 
+    // Marquer le magic link comme utilisé AVANT de changer le password (évite race condition)
+    await magicLinkService.markMagicLinkAsUsed(token);
+
     // Mettre à jour le mot de passe
     await authService.updatePassword(user.id, password);
-
-    // Marquer le magic link comme utilisé
-    await magicLinkService.markMagicLinkAsUsed(token);
 
     // Générer les tokens d'authentification
     const accessToken = authService.generateAccessToken(user);

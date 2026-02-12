@@ -14,6 +14,7 @@ router.get('/unclear-responses', authMiddleware, async (req, res) => {
         *,
         leads (first_name, last_name, phone)
       `)
+      .eq('client_id', req.user.tenantId)
       .eq('is_resolved', false)
       .order('created_at', { ascending: false });
 
@@ -21,7 +22,7 @@ router.get('/unclear-responses', authMiddleware, async (req, res) => {
     res.json(data);
   } catch (error) {
     logger.error('ai-synonyms', 'Error fetching unclear responses', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -36,11 +37,12 @@ router.post('/promote-to-synonym', authMiddleware, async (req, res) => {
       });
     }
 
-    // 1. Récupérer la unclear_response
+    // 1. Récupérer la unclear_response (filtrée par tenant)
     const { data: unclearResponse, error: fetchError } = await supabase
       .from('ai_unclear_responses')
       .select('*')
       .eq('id', unclear_response_id)
+      .eq('client_id', req.user.tenantId)
       .single();
 
     if (fetchError || !unclearResponse) {
@@ -85,7 +87,7 @@ router.post('/promote-to-synonym', authMiddleware, async (req, res) => {
 
   } catch (error) {
     logger.error('ai-synonyms', 'Error promoting to synonym', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -105,7 +107,8 @@ router.post('/dismiss-unclear', authMiddleware, async (req, res) => {
         resolution_value: 'DISMISSED',
         resolved_at: new Date().toISOString()
       })
-      .eq('id', unclear_response_id);
+      .eq('id', unclear_response_id)
+      .eq('client_id', req.user.tenantId);
 
     if (error) throw error;
 
@@ -113,7 +116,7 @@ router.post('/dismiss-unclear', authMiddleware, async (req, res) => {
 
   } catch (error) {
     logger.error('ai-synonyms', 'Error dismissing unclear response', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -138,7 +141,7 @@ router.get('/synonyms', authMiddleware, async (req, res) => {
     res.json(data);
   } catch (error) {
     logger.error('ai-synonyms', 'Error fetching synonyms', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -157,7 +160,7 @@ router.delete('/synonyms/:id', authMiddleware, async (req, res) => {
     res.json({ success: true, message: 'Synonyme désactivé' });
   } catch (error) {
     logger.error('ai-synonyms', 'Error deleting synonym', error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
