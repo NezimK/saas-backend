@@ -39,7 +39,7 @@
             overflow-x: hidden;
         }
 
-        /* Arriere-plan decoratif */
+        /* Arrière-plan décoratif */
         body::before {
             content: '';
             position: absolute;
@@ -437,7 +437,7 @@
             <div class="error-container">
                 <div class="error-icon">&#10060;</div>
                 <p class="subtitle" id="errorMessage">Une erreur est survenue</p>
-                <p class="help-text">Veuillez contacter le support ou reessayer.</p>
+                <p class="help-text">Veuillez contacter le support ou réessayer.</p>
             </div>
         </div>
 
@@ -448,7 +448,7 @@
                 Configurez votre compte IMMO Copilot.
             </p>
 
-            <!-- Indicateur d'etapes (3 etapes: Logiciel, Portails, Email) -->
+            <!-- Indicateur d'étapes (3 étapes: Logiciel, Portails, Email) -->
             <div class="step-indicator">
                 <div class="step-dot" id="dot1"></div>
                 <div class="step-dot" id="dot2"></div>
@@ -458,7 +458,7 @@
             <div id="error" class="error"></div>
             <div id="success" class="success"></div>
 
-            <!-- Etape 1: Choix du logiciel + Configuration API -->
+            <!-- Étape 1: Choix du logiciel + Configuration API -->
             <div id="logicielStep">
                 <p class="subtitle" style="margin-bottom: 20px;">Quel logiciel immobilier utilisez-vous ?</p>
 
@@ -474,19 +474,19 @@
                 <!-- Formulaire Netty -->
                 <div id="nettyForm">
                     <div class="info-box">
-                        <h3>Comment recuperer votre cle API Septeo ?</h3>
+                        <h3>Comment récupérer votre clé API Septeo ?</h3>
                         <ol>
-                            <li><strong>Allez dans Septeo :</strong> Parametres → Configuration → Gestion des cles API</li>
+                            <li><strong>Allez dans Septeo :</strong> Paramètres → Configuration → Gestion des clés API</li>
                             <li><strong>Cliquez sur "+ NOUVEAU"</strong></li>
                             <li><strong>Remplir le formulaire :</strong>
                                 <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
                                     <li>Nom de l'accès API : "IMMO Copilot"</li>
                                     <li>Clé associée à des : Données Réelles</li>
                                     <li>Active : Oui</li>
-                                    <li>IP autorisees : <code>51.178.42.123</code></li>
+                                    <li>IP autorisées : <code>151.80.232.33</code></li>
                                 </ul>
                             </li>
-                            <li><strong>Copiez la cle API</strong> generee et collez-la ci-dessous</li>
+                            <li><strong>Copiez la clé API</strong> générée et collez-la ci-dessous</li>
                         </ol>
                         <p style="margin-top: 15px;">
                             <a href="https://aide.netty.fr/gestion-cles-api-modelo-office" target="_blank">
@@ -496,13 +496,13 @@
                     </div>
 
                     <div class="input-group">
-                        <label for="apiKeyInput">Votre cle API Septeo</label>
-                        <input type="text" id="apiKeyInput" placeholder="Collez votre cle API ici"
+                        <label for="apiKeyInput">Votre clé API Septeo</label>
+                        <input type="text" id="apiKeyInput" placeholder="Collez votre clé API ici"
                             onkeypress="if(event.key === 'Enter') validateNettyAPI()">
-                        <div class="help-text">Cette cle permet a IMMO Copilot de synchroniser vos biens automatiquement
+                        <div class="help-text">Cette clé permet à IMMO Copilot de synchroniser vos biens automatiquement
                         </div>
                         <p class="help-text" style="margin-top: 12px; color: var(--gray-400);">
-                            Vous ne trouvez pas votre cle API ? Contactez le support de votre CRM.
+                            Vous ne trouvez pas votre clé API ? Contactez le support de votre CRM.
                         </p>
                     </div>
 
@@ -516,18 +516,18 @@
                     <div class="info-box">
                         <h3>Comment obtenir vos identifiants API Apimo ?</h3>
                         <ol>
-                            <li><strong>Contactez le support Apimo</strong> pour demander un acces API :
+                            <li><strong>Contactez le support Apimo</strong> pour demander un accès API :
                                 <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
-                                    <li>Par telephone : <code>+33 (0)4 92 91 90 63</code></li>
-                                    <li>Par email via le <a href="https://apimo.net/en/contact" target="_blank">formulaire de contact Apimo</a></li>
+                                    <li>Par téléphone : <code>+33 (0)4 92 91 90 63</code></li>
+                                    <li>Par email via votre CRM Apimo</li>
                                     <li>Par WhatsApp : <code>+33 4 92 91 90 63</code></li>
                                 </ul>
                             </li>
-                            <li><strong>Demandez un acces "Webservice API"</strong> en precisant que vous souhaitez connecter votre compte a IMMO Copilot</li>
+                            <li><strong>Demandez un accès "Webservice API"</strong> en précisant que vous souhaitez connecter votre compte à IMMO Copilot</li>
                             <li><strong>Vous recevrez 3 informations :</strong>
                                 <ul style="margin-top: 8px; margin-left: 20px; list-style-type: disc;">
-                                    <li><strong>Provider ID</strong> — identifiant numerique (ex: <code>1234</code>)</li>
-                                    <li><strong>Token</strong> — cle d'authentification (longue chaine de caracteres)</li>
+                                    <li><strong>Provider ID</strong> — identifiant numérique (ex: <code>1234</code>)</li>
+                                    <li><strong>Token</strong> — clé d'authentification (longue chaîne de caractères)</li>
                                     <li><strong>Agency ID</strong> — identifiant de votre agence (ex: <code>56789</code>)</li>
                                 </ul>
                             </li>
@@ -544,14 +544,14 @@
                         <label for="apimoProviderInput">Provider ID</label>
                         <input type="text" id="apimoProviderInput" placeholder="Ex: 1234"
                             onkeypress="if(event.key === 'Enter') document.getElementById('apimoTokenInput').focus()">
-                        <div class="help-text">Identifiant numerique fourni par Apimo</div>
+                        <div class="help-text">Identifiant numérique fourni par Apimo</div>
                     </div>
 
                     <div class="input-group">
                         <label for="apimoTokenInput">Token</label>
                         <input type="text" id="apimoTokenInput" placeholder="Collez votre token ici"
                             onkeypress="if(event.key === 'Enter') document.getElementById('apimoAgencyInput').focus()">
-                        <div class="help-text">Cle d'authentification fournie par Apimo</div>
+                        <div class="help-text">Clé d'authentification fournie par Apimo</div>
                     </div>
 
                     <div class="input-group">
@@ -571,40 +571,40 @@
                 </div>
             </div>
 
-            <!-- Etape 2: Selection des portails -->
+            <!-- Étape 2: Sélection des portails -->
             <div id="portalsStep" style="display: none;">
-                <p class="subtitle" style="margin-bottom: 20px;">Selectionnez les portails immobiliers dont vous
+                <p class="subtitle" style="margin-bottom: 20px;">Sélectionnez les portails immobiliers dont vous
                     souhaitez recevoir les notifications</p>
 
                 <div class="portals-grid" id="portalsGrid">
-                    <!-- Les portails seront ajoutes dynamiquement -->
+                    <!-- Les portails seront ajoutés dynamiquement -->
                 </div>
 
                 <p style="margin-bottom: 20px; color: var(--gray-400); font-size: 14px;">
-                    <span class="count" id="selectedCount">0</span> portail(s) selectionne(s)
+                    <span class="count" id="selectedCount">0</span> portail(s) sélectionné(s)
                 </p>
 
                 <div class="btn-container">
-                    <button class="btn btn-secondary" onclick="selectAll()">Tout selectionner</button>
+                    <button class="btn btn-secondary" onclick="selectAll()">Tout sélectionner</button>
                     <button class="btn btn-primary" id="continueBtn" onclick="saveAndContinue()" disabled>
-                        Connectez votre boite mail
+                        Connectez votre boîte mail
                     </button>
                 </div>
             </div>
 
-            <!-- Etape 3: Email OAuth (Gmail ou Outlook) -->
+            <!-- Étape 3: Email OAuth (Gmail ou Outlook) -->
             <div id="gmailStep" style="display: none;">
-                <p class="subtitle" style="margin-bottom: 20px;">Connexion a votre boite mail</p>
+                <p class="subtitle" style="margin-bottom: 20px;">Connexion à votre boîte mail</p>
 
                 <div class="info-box">
-                    <h3>Pourquoi connecter ma boite mail ?</h3>
+                    <h3>Pourquoi connecter ma boîte mail ?</h3>
                     <p style="color: var(--gray-400); line-height: 1.6;">
-                        IMMO Copilot a besoin d'acceder a votre boite mail pour detecter automatiquement
+                        IMMO Copilot a besoin d'accéder à votre boîte mail pour détecter automatiquement
                         les notifications des portails immobiliers et extraire les informations de contact.
                     </p>
                     <p style="color: var(--gray-400); margin-top: 15px; line-height: 1.6;">
-                        <strong style="color: var(--gray-300);">Nous respectons votre vie privee :</strong>
-                        Seuls les emails provenant des portails selectionnes sont analyses.
+                        <strong style="color: var(--gray-300);">Nous respectons votre vie privée :</strong>
+                        Seuls les emails provenant des portails sélectionnés sont analysés.
                     </p>
                 </div>
 
@@ -647,19 +647,19 @@
         let tenantData = null;
         let currentStep = 1;
 
-        // Recuperer les parametres depuis l'URL
+        // Récupérer les paramètres depuis l'URL
         const urlParams = new URLSearchParams(window.location.search);
         tenantId = urlParams.get('tenantId');
         const gmailSuccess = urlParams.get('gmail_success');
         const outlookSuccess = urlParams.get('outlook_success');
 
-        // Token d'onboarding pour authentifier les requetes
+        // Token d'onboarding pour authentifier les requêtes
         const onboardingToken = localStorage.getItem('onboardingToken');
         function authHeaders(extra = {}) {
             return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${onboardingToken}`, ...extra };
         }
 
-        // Elements du DOM
+        // Éléments du DOM
         const loadingState = document.getElementById('loadingState');
         const errorState = document.getElementById('errorState');
         const mainContent = document.getElementById('mainContent');
@@ -669,11 +669,11 @@
         // Initialisation au chargement
         async function initOnboarding() {
             if (!tenantId) {
-                showErrorState('Lien invalide. Veuillez utiliser le lien recu par email.');
+                showErrorState('Lien invalide. Veuillez utiliser le lien reçu par email.');
                 return;
             }
 
-            // Si Gmail ou Outlook OAuth a reussi, finaliser l'onboarding
+            // Si Gmail ou Outlook OAuth a réussi, finaliser l'onboarding
             if (gmailSuccess === 'true' || outlookSuccess === 'true') {
                 await completeOnboardingAfterEmail();
                 return;
@@ -685,7 +685,7 @@
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    showErrorState(data.error || 'Tenant non trouve');
+                    showErrorState(data.error || 'Tenant non trouvé');
                     return;
                 }
 
@@ -698,7 +698,7 @@
                 loadingState.style.display = 'none';
                 mainContent.style.display = 'block';
 
-                // Mettre a jour l'indicateur d'etapes
+                // Mettre à jour l'indicateur d'étapes
                 updateStepIndicator();
 
             } catch (error) {
@@ -724,17 +724,17 @@
                     throw new Error(data.error || 'Erreur lors de la finalisation');
                 }
 
-                // Afficher message de succes
-                loadingState.querySelector('.loading-text').textContent = 'Configuration terminee ! Redirection vers le dashboard...';
+                // Afficher message de succès
+                loadingState.querySelector('.loading-text').textContent = 'Configuration terminée ! Redirection vers le dashboard...';
 
-                // Rediriger vers le dashboard apres 2 secondes
+                // Rediriger vers le dashboard après 2 secondes
                 setTimeout(() => {
                     window.location.href = data.dashboardUrl;
                 }, 2000);
 
             } catch (error) {
                 console.error('Erreur finalisation:', error);
-                showErrorState('Erreur lors de la finalisation. Veuillez reessayer.');
+                showErrorState('Erreur lors de la finalisation. Veuillez réessayer.');
             }
         }
 
@@ -745,7 +745,7 @@
             errorMessage.textContent = message;
         }
 
-        // Finaliser l'onboarding apres connexion email reussie
+        // Finaliser l'onboarding après connexion email réussie
         async function completeOnboardingAfterEmail() {
             try {
                 // Charger les infos du tenant
@@ -753,7 +753,7 @@
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    showErrorState(data.error || 'Tenant non trouve');
+                    showErrorState(data.error || 'Tenant non trouvé');
                     return;
                 }
 
@@ -764,7 +764,7 @@
                 loadingState.style.display = 'none';
                 mainContent.style.display = 'block';
 
-                // Cacher toutes les etapes
+                // Cacher toutes les étapes
                 document.getElementById('logicielStep').style.display = 'none';
                 document.getElementById('portalsStep').style.display = 'none';
                 document.getElementById('gmailStep').style.display = 'none';
@@ -772,7 +772,7 @@
                 currentStep = 3;
                 updateStepIndicator();
 
-                showSuccess('Connexion email reussie ! Finalisation de votre compte...');
+                showSuccess('Connexion email réussie ! Finalisation de votre compte...');
 
                 // Finaliser l'onboarding directement
                 setTimeout(() => {
@@ -785,7 +785,7 @@
             }
         }
 
-        // Mettre a jour l'indicateur d'etapes (3 etapes)
+        // Mettre à jour l'indicateur d'étapes (3 étapes)
         function updateStepIndicator() {
             document.getElementById('dot1').classList.toggle('active', currentStep >= 1);
             document.getElementById('dot2').classList.toggle('active', currentStep >= 2);
@@ -797,12 +797,12 @@
             const apiKey = apiKeyInput.value.trim();
 
             if (!apiKey) {
-                showError('Veuillez entrer votre cle API Septeo');
+                showError('Veuillez entrer votre clé API Septeo');
                 return;
             }
 
             if (!tenantId) {
-                showError('Erreur: tenant non initialise');
+                showError('Erreur : tenant non initialisé');
                 return;
             }
 
@@ -820,19 +820,19 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || 'Erreur lors de la validation de la clée API');
+                    throw new Error(data.error || 'Erreur lors de la validation de la clé API');
                 }
 
-                showSuccess('Cle API Septeo validee avec succes !');
+                showSuccess('Clé API Septeo validée avec succès !');
 
-                // Passer a l'etape portails apres 1 seconde
+                // Passer à l'étape portails après 1 seconde
                 setTimeout(() => {
                     document.getElementById('logicielStep').style.display = 'none';
                     document.getElementById('portalsStep').style.display = 'block';
                     currentStep = 2;
                     updateStepIndicator();
                     renderPortals([]);
-                    // Scroll vers le haut de l'etape
+                    // Scroll vers le haut de l'étape
                     document.getElementById('portalsStep').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 1000);
 
@@ -843,7 +843,7 @@
             }
         }
 
-        // Selectionner le logiciel (Netty ou Apimo)
+        // Sélectionner le logiciel (Netty ou Apimo)
         let selectedLogiciel = 'netty';
         function selectLogiciel(logiciel) {
             selectedLogiciel = logiciel;
@@ -865,7 +865,7 @@
             }
 
             if (!tenantId) {
-                showError('Erreur: tenant non initialise');
+                showError('Erreur : tenant non initialisé');
                 return;
             }
 
@@ -886,9 +886,9 @@
                     throw new Error(data.error || 'Erreur lors de la validation des credentials');
                 }
 
-                showSuccess('Credentials API Apimo validees avec succes !');
+                showSuccess('Credentials API Apimo validées avec succès !');
 
-                // Passer a l'etape portails apres 1 seconde
+                // Passer à l'étape portails après 1 seconde
                 setTimeout(() => {
                     document.getElementById('logicielStep').style.display = 'none';
                     document.getElementById('portalsStep').style.display = 'block';
@@ -906,6 +906,7 @@
         }
 
         function renderPortals(existingFilters = []) {
+
             const grid = document.getElementById('portalsGrid');
             grid.innerHTML = portals.map((portal, index) => `
                 <div class="portal-card" id="card-${index}" onclick="togglePortal(${index})">
@@ -923,7 +924,7 @@
                     }
                 });
             } else {
-                // Selectionner les 5 premiers par defaut
+                // Sélectionner les 5 premiers par défaut
                 [0, 1, 2, 3, 4].forEach(i => {
                     document.getElementById(`portal-${i}`).checked = true;
                     document.getElementById(`card-${i}`).classList.add('selected');
@@ -964,12 +965,12 @@
                 .map(p => p.domain);
 
             if (selectedDomains.length === 0) {
-                showError('Veuillez selectionner au moins un portail');
+                showError('Veuillez sélectionner au moins un portail');
                 return;
             }
 
             if (!tenantId) {
-                showError('Erreur: tenant non initialise');
+                showError('Erreur : tenant non initialisé');
                 return;
             }
 
@@ -992,15 +993,15 @@
                     throw new Error(data.error || 'Erreur lors de la sauvegarde');
                 }
 
-                showSuccess('Configuration enregistree !');
+                showSuccess('Configuration enregistrée !');
 
-                // Passer a l'etape Gmail
+                // Passer à l'étape Gmail
                 setTimeout(() => {
                     document.getElementById('portalsStep').style.display = 'none';
                     document.getElementById('gmailStep').style.display = 'block';
                     currentStep = 3;
                     updateStepIndicator();
-                    // Scroll vers le haut de l'etape
+                    // Scroll vers le haut de l'étape
                     document.getElementById('gmailStep').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 1000);
 
